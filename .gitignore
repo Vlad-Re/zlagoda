@@ -1,5 +1,24 @@
 .idea/
 
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+
+# Node (safety net; frontend/ has its own .gitignore)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
