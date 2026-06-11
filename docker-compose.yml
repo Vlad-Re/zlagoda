@@ -8,5 +8,5 @@ services:
       POSTGRES_PASSWORD: supersecretpassword
       POSTGRES_DB: zlagoda_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     restart: unless-stopped
