@@ -21,6 +21,6 @@ class Command(BaseCommand):
             constraints.apply(cursor)
         self.stdout.write(
             self.style.SUCCESS(
-                f"Applied {len(constraints.FK_POLICIES)} foreign-key policy(ies)."
+                f"Applied {len(constraints.SQL_CONSTRAINTS)} SQL constraints."
             )
         )

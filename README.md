@@ -94,3 +94,11 @@ backend/
 frontend/              React 19 + Vite app
 docker-compose.yml     PostgreSQL service
 ```
+## How to run migration
+from backend directory:
+```bash
+python manage.py makemigrations
+python manage.py migrate
+python manage.py apply_constraints
+```
+
