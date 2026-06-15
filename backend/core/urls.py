@@ -38,5 +38,35 @@ urlpatterns = [
         views.report_product_volume,
         name="report-product-volume",
     ),
+    path(
+        "reports/total-sold-per-product/",
+        views.report_total_sold_per_product,
+        name="report-total-sold-per-product",
+    ),
+    path(
+        "reports/customers-served-by-all-cashiers/",
+        views.report_customers_served_by_all_cashiers,
+        name="report-customers-served-by-all-cashiers",
+    ),
+    path(
+        "reports/top-cashiers/",
+        views.report_top_cashiers,
+        name="report-top-cashiers",
+    ),
+    path(
+        "reports/categories-all-products-sold/",
+        views.report_categories_all_products_sold,
+        name="report-categories-all-products-sold",
+    ),
+    path(
+        "reports/total-sold-per-category/",
+        views.report_total_sold_per_category,
+        name="report-total-sold-per-category",
+    ),
+    path(
+        "reports/employees-served-all-customers/",
+        views.report_employees_served_all_customers,
+        name="report-employees-served-all-customers",
+    ),
     path("ui/dropdowns/<str:entity>/", views.ui_dropdowns, name="ui-dropdowns"),
 ]
