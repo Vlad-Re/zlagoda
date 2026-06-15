@@ -1,5 +1,5 @@
 .idea/
-
+out/
 # OS-generated files
 .DS_Store
 .DS_Store?
@@ -31,7 +31,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/

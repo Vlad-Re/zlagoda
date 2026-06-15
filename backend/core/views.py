@@ -6,20 +6,26 @@ from django.views.decorators.http import require_http_methods
 from django.db import transaction, IntegrityError
 from . import queries
 
+# ==========================================
+# ДОПОМІЖНІ ФУНКЦІЇ
+# ==========================================
 
 
 def validate_sort_column(sort_column, allowed_columns):
-    """Validate sort column (protection against SQL injection)."""
+    """Перевірка колонки для сортування (захист від SQL-ін'єкцій)."""
     if not sort_column or sort_column not in allowed_columns:
         return allowed_columns[0]  # Значення за замовчуванням
     return sort_column
 
 
+# Білі списки колонок для кожної таблиці
 EMP_SORT_COLS = ["empl_surname", "empl_name", "empl_role", "salary", "date_of_start"]
 CARD_SORT_COLS = ["cust_surname", "percent", "city"]
 STORE_PROD_SORT_COLS = ["products_number", "selling_price", '"UPC"']
 
-
+# ==========================================
+# 1. CATEGORY VIEWS (Категорії)
+# ==========================================
 
 
 @csrf_exempt
@@ -66,13 +72,16 @@ def category_detail(request, category_number):
             return JsonResponse({"message": "Категорію видалено"})
         except IntegrityError:
             return JsonResponse(
-                {"error": "Неможливо видалити: до цієї категорії прив'язані товари."},
+                {"error": "Cannot delete: products are attached to this category."},
                 status=409,
             )
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
 
+# ==========================================
+# 2. EMPLOYEE VIEWS (Працівники)
+# ==========================================
 
 
 @csrf_exempt
@@ -119,7 +128,7 @@ def employee_list_create(request):
             return JsonResponse({"message": "Працівника створено"}, status=201)
         except IntegrityError:
             return JsonResponse(
-                {"error": "Порушення обмежень. Перевірте вік (>=18) або телефон."},
+                {"error": "Constraint violation. Check age (>=18) or phone format."},
                 status=400,
             )
         except Exception as e:
@@ -179,6 +188,9 @@ def employee_detail(request, id_employee):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+# ==========================================
+# 3. CUSTOMER CARD VIEWS (Карти клієнтів)
+# ==========================================
 
 
 @csrf_exempt
@@ -266,6 +278,9 @@ def customer_card_detail(request, card_number):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+# ==========================================
+# 4. PRODUCT VIEWS (Товари у довіднику)
+# ==========================================
 
 
 @csrf_exempt
@@ -353,6 +368,9 @@ def product_detail(request, id_product):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+# ==========================================
+# 5. STORE PRODUCT VIEWS (Товари на вітрині)
+# ==========================================
 
 
 @csrf_exempt
@@ -437,12 +455,16 @@ def store_product_detail(request, upc):
             return JsonResponse({"message": "Товар видалено з магазину"})
         except IntegrityError:
             return JsonResponse(
-                {"error": "Неможливо видалити товар, який вже є у чеках."}, status=409
+                {"error": "Cannot delete: product is already included in checks."},
+                status=409,
             )
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
 
+# ==========================================
+# 6. CHECK VIEWS (Чеки та Продажі) - ТРАНЗАКЦІЯ
+# ==========================================
 
 
 @csrf_exempt
@@ -484,19 +506,41 @@ def check_list_create(request):
         if not products:
             return JsonResponse({"error": "Чек не може бути порожнім"}, status=400)
 
-        sum_total = sum(
-            float(p["product_number"]) * float(p["selling_price"]) for p in products
-        )
-        vat = sum_total * 0.2
-
         try:
             with transaction.atomic():
+                sum_total = 0
+                processed_products = []
 
+                # 1. Збираємо АКТУАЛЬНІ ціни та рахуємо загальну суму ДО створення чека
+                for product in products:
+                    actual_product = queries.fetch_one(
+                        'SELECT selling_price FROM store_product WHERE "UPC" = %s FOR UPDATE',
+                        [product["UPC"]],
+                    )
+                    if not actual_product:
+                        raise Exception(f"Товар з UPC {product['UPC']} не знайдено.")
+
+                    real_price = float(actual_product["selling_price"])
+                    qty = float(product["product_number"])
+                    sum_total += qty * real_price
+
+                    # Зберігаємо реальні дані для наступного кроку
+                    processed_products.append(
+                        {
+                            "UPC": product["UPC"],
+                            "product_number": product["product_number"],
+                            "selling_price": real_price,
+                        }
+                    )
+
+                vat = sum_total * 0.2
+
+                # 2. Створюємо шапку чека (тепер маємо валідні sum_total та vat)
                 queries.execute(
                     """
-                                INSERT INTO "check" (check_number, id_employee, card_number, print_date, sum_total, vat)
-                                VALUES (%s, %s, %s, %s, %s, %s)
-                                """,
+                    INSERT INTO "check" (check_number, id_employee, card_number, print_date, sum_total, vat)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
                     [
                         check_number,
                         id_employee,
@@ -507,27 +551,28 @@ def check_list_create(request):
                     ],
                 )
 
-                for product in products:
+                # 3. Записуємо кожен товар у Sale і віднімаємо кількість зі складу
+                for pp in processed_products:
                     queries.execute(
                         """
-                                    INSERT INTO sale ("UPC", check_number, product_number, selling_price)
-                                    VALUES (%s, %s, %s, %s)
-                                    """,
+                        INSERT INTO sale ("UPC", check_number, product_number, selling_price)
+                        VALUES (%s, %s, %s, %s)
+                        """,
                         [
-                            product["UPC"],
+                            pp["UPC"],
                             check_number,
-                            product["product_number"],
-                            product["selling_price"],
+                            pp["product_number"],
+                            pp["selling_price"],
                         ],
                     )
 
                     queries.execute(
                         """
-                                    UPDATE store_product
-                                    SET products_number = products_number - %s
-                                    WHERE "UPC" = %s
-                                    """,
-                        [product["product_number"], product["UPC"]],
+                        UPDATE store_product
+                        SET products_number = products_number - %s
+                        WHERE "UPC" = %s
+                        """,
+                        [pp["product_number"], pp["UPC"]],
                     )
 
             return JsonResponse(
@@ -576,6 +621,9 @@ def check_detail(request, check_number):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+# ==========================================
+# 7. REPORT VIEWS (Звіти)
+# ==========================================
 
 
 @require_http_methods(["GET"])
@@ -637,6 +685,49 @@ def report_product_volume(request):
     )
 
 
+@require_http_methods(["GET"])
+def report_total_sold_per_product(request):
+    return JsonResponse({"results": queries.get_total_sold_per_product()}, safe=False)
+
+
+@require_http_methods(["GET"])
+def report_customers_served_by_all_cashiers(request):
+    return JsonResponse(
+        {"results": queries.get_customers_served_by_all_cashiers()}, safe=False
+    )
+
+
+@require_http_methods(["GET"])
+def report_top_cashiers(request):
+    start = request.GET.get("start", "1970-01-01")
+    end = request.GET.get("end", "2100-01-01")
+    return JsonResponse(
+        {"results": queries.get_top_cashiers_for_period(start, end)}, safe=False
+    )
+
+
+@require_http_methods(["GET"])
+def report_categories_all_products_sold(request):
+    return JsonResponse(
+        {"results": queries.get_categories_with_all_products_sold()}, safe=False
+    )
+
+
+@require_http_methods(["GET"])
+def report_total_sold_per_category(request):
+    return JsonResponse({"results": queries.get_total_sold_per_category()}, safe=False)
+
+
+@require_http_methods(["GET"])
+def report_employees_served_all_customers(request):
+    return JsonResponse(
+        {"results": queries.get_employees_who_served_all_card_customers()}, safe=False
+    )
+
+
+# ==========================================
+# 8. UI DROPDOWNS VIEW (Для дружнього інтерфейсу)
+# ==========================================
 
 
 @require_http_methods(["GET"])

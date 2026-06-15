@@ -102,3 +102,7 @@ python manage.py migrate
 python manage.py apply_constraints
 ```
 
+## How to run tests
+use test.bat
+
+
