@@ -1,7 +1,6 @@
 from django.db import connection
 
 
-
 def dictfetchall(cursor):
     """Convert SQL query result from list of tuples to list of dictionaries."""
     columns = [col[0] for col in cursor.description]
@@ -112,3 +111,116 @@ def get_check_details(check_number):
             WHERE s.check_number = %s; \
             """
     return fetch_all(query, [check_number])
+
+
+# ==========================================
+# ДОДАТКОВІ СКЛАДНІ ЗАПИТИ (Advanced Options)
+# ==========================================
+
+
+def get_total_sold_per_product():
+    """Знайти загальну кількість проданих одиниць для кожного найменування товару."""
+    query = """
+            SELECT p.product_name, SUM(s.product_number) AS total_sold
+            FROM product p
+                     INNER JOIN store_product sp ON p.id_product = sp.id_product
+                     INNER JOIN sale s ON sp."UPC" = s."UPC"
+            GROUP BY p.product_name
+            ORDER BY total_sold DESC; \
+            """
+    return fetch_all(query)
+
+
+def get_customers_served_by_all_cashiers():
+    """Знайти постійних клієнтів, яких обслуговували абсолютно всі касири (Реляційне ділення)."""
+    query = """
+            SELECT c.cust_surname, c.cust_name
+            FROM customer_card c
+            WHERE NOT EXISTS (
+                SELECT e.id_employee
+                FROM employee e
+                WHERE e.empl_role = 'Cashier'
+                  AND NOT EXISTS (
+                    SELECT ch.check_number
+                    FROM "check" ch
+                    WHERE ch.card_number = c.card_number
+                      AND ch.id_employee = e.id_employee
+                )
+            ); \
+            """
+    return fetch_all(query)
+
+
+def get_top_cashiers_for_period(start_date, end_date):
+    """
+    Визначити найприбутковіших касирів за період.
+    Повертає лише тих, хто має більше 5 чеків. Сортування за виручкою.
+    """
+    # Оптимізовано: замість вкладеного SELECT для COUNT, використано стандартний GROUP BY + HAVING
+    query = """
+            SELECT e.id_employee, e.empl_surname, e.empl_name,
+                   COUNT(DISTINCT ch.check_number) AS checks_count,
+                   SUM(s.product_number * s.selling_price) AS revenue,
+                   ROUND(SUM(s.product_number * s.selling_price) / COUNT(DISTINCT ch.check_number), 2) AS avg_check
+            FROM employee e
+                     INNER JOIN "check" ch ON e.id_employee = ch.id_employee
+                     INNER JOIN sale s ON ch.check_number = s.check_number
+            WHERE ch.print_date >= %s AND ch.print_date <= %s
+            GROUP BY e.id_employee, e.empl_surname, e.empl_name
+            HAVING COUNT(DISTINCT ch.check_number) > 5
+            ORDER BY revenue DESC; \
+            """
+    return fetch_all(query, [start_date, end_date])
+
+
+def get_categories_with_all_products_sold():
+    """Знайти категорії товарів, кожен з товарів якої був проданий хоча б один раз."""
+    query = """
+            SELECT c.category_number, c.category_name
+            FROM category c
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM product p
+                WHERE p.category_number = c.category_number
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM store_product sp
+                             INNER JOIN sale s ON sp."UPC" = s."UPC"
+                    WHERE sp.id_product = p.id_product
+                )
+            ); \
+            """
+    return fetch_all(query)
+
+
+def get_total_sold_per_category():
+    """Знайти загальну кількість проданих одиниць товарів для кожної категорії продукції."""
+    query = """
+            SELECT c.category_name, SUM(s.product_number) AS total_sold
+            FROM category c
+                     INNER JOIN product p ON c.category_number = p.category_number
+                     INNER JOIN store_product sp ON p.id_product = sp.id_product
+                     INNER JOIN sale s ON sp."UPC" = s."UPC"
+            GROUP BY c.category_name
+            ORDER BY total_sold DESC; \
+            """
+    return fetch_all(query)
+
+
+def get_employees_who_served_all_card_customers():
+    """Знайти працівників, які пробили хоча б один чек абсолютно кожному існуючому клієнту з карткою."""
+    query = """
+            SELECT e.empl_surname, e.empl_name
+            FROM employee e
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM customer_card c
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM "check" ch
+                    WHERE ch.id_employee = e.id_employee
+                      AND ch.card_number = c.card_number
+                )
+            ); \
+            """
+    return fetch_all(query)
