@@ -152,7 +152,7 @@ class ApiCrudTests(BaseZlagodaTest):
         response = self.client.post(
             "/api/products/", data=json.dumps(payload), content_type="application/json"
         )
-        # IntegrityError should be caught and returned as 400 Bad Request
+        # IntegrityError (due to invalid foreign key) should be caught and returned as 400 Bad Request.
         self.assertEqual(response.status_code, 400)
 
 

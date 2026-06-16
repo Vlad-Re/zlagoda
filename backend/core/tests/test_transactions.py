@@ -82,7 +82,8 @@ class CheckTransactionTests(BaseZlagodaTest):
             "/api/checks/", data=json.dumps(payload), content_type="application/json"
         )
 
-        # Expect 400 because CHECK (products_number >= 0) will prevent negative stock
+        # Expect 400 because attempting to sell more than available stock raises IntegrityError,
+        # which is caught by the API view and returned as a 400 Bad Request.
         self.assertEqual(response.status_code, 400)
 
         check = queries.fetch_one(
