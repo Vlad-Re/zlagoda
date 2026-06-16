@@ -25,6 +25,7 @@ ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split("
 
 INSTALLED_APPS = [
     "django.contrib.staticfiles",
+    "django.contrib.sessions",
     "rest_framework",
     "corsheaders",
     "core",
@@ -33,8 +34,12 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
+
+SESSION_COOKIE_AGE = 86400
+SESSION_COOKIE_HTTPONLY = True
 
 ROOT_URLCONF = "config.urls"
 
