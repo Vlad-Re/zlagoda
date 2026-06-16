@@ -1,5 +1,6 @@
 from django.test import TestCase, Client
 from django.core.management import call_command
+from django.contrib.auth.hashers import make_password
 from core import queries
 
 
@@ -21,8 +22,8 @@ class BaseZlagodaTest(TestCase):
 
         # Create employee
         queries.execute(
-            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             [
                 "EMP_TEST",
                 "Тестер",
@@ -35,6 +36,7 @@ class BaseZlagodaTest(TestCase):
                 "Київ",
                 "Вулиця",
                 "00000",
+                make_password('password123'),
             ],
         )
 
