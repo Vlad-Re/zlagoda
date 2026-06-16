@@ -242,3 +242,46 @@ input:disabled, select:disabled { background: #f3f4f6; cursor: not-allowed; }
 .print-header { text-align: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid #000; }
 .print-header h2 { margin: 0 0 .25rem; }
 .print-footer { margin-top: 1.5rem; padding-top: .75rem; border-top: 1px solid #ccc; font-size: .75rem; color: #666; }
+
+/* PROFILE */
+.profile-card {
+  max-width: 500px;
+  padding: 2rem;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.profile-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.profile-row:first-child {
+  padding-top: 0;
+}
+
+.profile-label {
+  font-weight: 600;
+  color: #64748b;
+  width: 45%;
+}
+
+.profile-value {
+  width: 55%;
+  color: #0f172a;
+  font-weight: 500;
+}

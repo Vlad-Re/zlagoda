@@ -15,9 +15,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (id_employee, password) => {
-    const data = await apiLogin(id_employee, password);
-    setUser(data);
-    return data;
+    await apiLogin(id_employee, password);
+    const fullUserData = await getMe();
+    setUser(fullUserData);
+    return fullUserData;
   };
 
   const logout = async () => {

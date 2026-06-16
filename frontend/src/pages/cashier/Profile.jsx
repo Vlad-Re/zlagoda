@@ -21,28 +21,26 @@ export default function Profile() {
   if (!user) return <div className="loading">Завантаження...</div>;
 
   return (
-    <div className="page">
-      <div className="page-header"><h1>Мій профіль</h1></div>
-      <div className="card" style={{ maxWidth: 500 }}>
-        <table>
-          <tbody>
+      <div className="page">
+        <div className="page-header"><h1>Мій профіль</h1></div>
+        <div className="card profile-card">
+          <div className="profile-details">
             {Object.entries(labels).map(([key, label]) => (
-              user[key] !== undefined && user[key] !== null ? (
-                <tr key={key}>
-                  <td style={{ fontWeight: 600, width: '45%', paddingLeft: 0 }}>{label}</td>
-                  <td style={{ paddingLeft: '1rem' }}>
-                    {key === 'salary'
+                user[key] !== undefined && user[key] !== null && user[key] !== '' ? (
+                    <div className="profile-row" key={key}>
+                      <span className="profile-label">{label}</span>
+                      <span className="profile-value">
+                  {key === 'salary'
                       ? `${Number(user[key]).toLocaleString('uk-UA')} грн`
                       : key === 'empl_role'
-                      ? (user[key] === 'Manager' ? 'Менеджер' : 'Касир')
-                      : String(user[key])}
-                  </td>
-                </tr>
-              ) : null
+                          ? (user[key] === 'Manager' ? 'Менеджер' : 'Касир')
+                          : String(user[key])}
+                </span>
+                    </div>
+                ) : null
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
-    </div>
   );
 }
