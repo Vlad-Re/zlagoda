@@ -1,7 +1,6 @@
 import json
 import datetime
 from datetime import date
-from django.contrib.auth.hashers import make_password
 
 from core import queries
 from .test_base import BaseZlagodaTest
@@ -30,7 +29,7 @@ class ApiCrudTests(BaseZlagodaTest):
             "city": "Київ",
             "street": "Вулиця",
             "zip_code": "00000",
-            "password": "password123",
+            "password_hash": "",
         }
 
         response = self.client.post(
@@ -101,9 +100,9 @@ class ApiCrudTests(BaseZlagodaTest):
     def test_delete_rookie_cashier_success(self):
         """Успішне видалення касира, який не пробив жодного чека."""
         queries.execute(
-            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password)
+            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
                            VALUES ('ROOKIE', 'Новачок', 'Іван', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380000000000', 'Київ', 'Вул', '00000', %s)""",
-            [make_password('password123')]
+            ['']
         )
         response = self.client.delete("/api/employees/ROOKIE/")
         self.assertEqual(response.status_code, 200)
@@ -299,7 +298,7 @@ class Case19BoundaryAgeTests(BaseZlagodaTest):
             "city": "Київ",
             "street": "Вулиця",
             "zip_code": "00000",
-            "password": "password123",
+            "password_hash": "",
         }
 
         response = self.client.post(
@@ -324,7 +323,7 @@ class Case19BoundaryAgeTests(BaseZlagodaTest):
             "city": "Київ",
             "street": "Вулиця",
             "zip_code": "00000",
-            "password": "password123",
+            "password_hash": "",
         }
 
         response = self.client.post(
@@ -351,7 +350,7 @@ class Case22PhoneBoundaryTests(BaseZlagodaTest):
             "city": "К",
             "street": "В",
             "zip_code": "0",
-            "password": "password123",
+            "password_hash": "",
         }
         response = self.client.post(
             "/api/employees/", data=json.dumps(payload), content_type="application/json"
@@ -372,7 +371,7 @@ class Case22PhoneBoundaryTests(BaseZlagodaTest):
             "city": "К",
             "street": "В",
             "zip_code": "0",
-            "password": "password123",
+            "password_hash": "",
         }
         response = self.client.post(
             "/api/employees/", data=json.dumps(payload), content_type="application/json"

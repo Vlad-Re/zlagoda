@@ -3,7 +3,6 @@ import threading
 from django.test import TransactionTestCase, Client
 from django.core.management import call_command
 from django.db import connection
-from django.contrib.auth.hashers import make_password
 
 from core import queries
 from .test_base import BaseZlagodaTest
@@ -349,9 +348,9 @@ class Case20RaceConditionTests(TransactionTestCase):
             "INSERT INTO product (id_product, category_number, product_name, characteristics) VALUES (100, 1, 'Race Prod', 'X')"
         )
         queries.execute(
-            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password)
+            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
                            VALUES ('EMP_RACE', 'Тестер', 'Рейс', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380123456789', 'Київ', 'Вул', '0', %s)""",
-            [make_password('password123')]
+            ['']
         )
 
         queries.execute(
