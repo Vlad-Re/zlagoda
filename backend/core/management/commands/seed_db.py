@@ -233,9 +233,14 @@ class Command(BaseCommand):
 
             # 7. Dynamic Total Calculation
             cursor.execute("""
+                           UPDATE "check" c
+                           SET sum_total = COALESCE(
+                                   (SELECT SUM(product_number * selling_price) FROM sale s WHERE s.check_number = c.check_number)
+                                       * (1 - COALESCE((SELECT percent FROM customer_card cc WHERE cc.card_number = c.card_number), 0) / 100.0),
+                                   0);
+
                            UPDATE "check"
-                           SET sum_total = COALESCE((SELECT SUM(product_number * selling_price) FROM sale WHERE sale.check_number = "check".check_number), 0),
-                               vat = COALESCE((SELECT SUM(product_number * selling_price) * 0.2 FROM sale WHERE sale.check_number = "check".check_number), 0);
+                           SET vat = sum_total * 0.2;
                            """)
 
         self.stdout.write(

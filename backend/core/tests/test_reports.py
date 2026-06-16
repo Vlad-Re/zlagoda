@@ -4,6 +4,13 @@ from .test_base import BaseZlagodaTest
 
 
 class ReportTests(BaseZlagodaTest):
+    def setUp(self):
+        super().setUp()
+        session = self.client.session
+        session["employee_id"] = "EMP_TEST"
+        session["role"] = "Manager"
+        session.save()
+
     def test_ui_dropdowns_endpoint(self):
         """Test auxiliary endpoint for forming dropdown lists."""
         response = self.client.get("/api/ui/dropdowns/categories/")
@@ -16,10 +23,12 @@ class ReportTests(BaseZlagodaTest):
 class Case5RelationalDivisionTests(BaseZlagodaTest):
     def setUp(self):
         super().setUp()
-        # Очищуємо таблиці транзакцій, щоб інші тести не впливали на звіт
+        session = self.client.session
+        session["employee_id"] = "EMP_TEST"
+        session["role"] = "Manager"
+        session.save()
+
         queries.execute('DELETE FROM "check"')
-        queries.execute("DELETE FROM customer_card")
-        queries.execute("DELETE FROM employee WHERE id_employee != 'EMP_TEST'")
 
         # Створюємо 2 обов'язкові картки
         queries.execute(
@@ -30,9 +39,9 @@ class Case5RelationalDivisionTests(BaseZlagodaTest):
 
         # Створюємо касира-зірку і касира-аутсайдера
         queries.execute(
-            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-                           VALUES ('STAR', 'Зірка', 'З', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380003', 'К', 'В', '0'),
-                                  ('LAZY', 'Лінивий', 'Л', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380004', 'К', 'В', '0')"""
+            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
+               VALUES ('STAR', 'Зірка', 'З', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380003', 'К', 'В', '0', ''),
+                      ('LAZY', 'Лінивий', 'Л', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380004', 'К', 'В', '0', '')"""
         )
 
         # STAR обслуговує ОБОХ клієнтів (умови реляційного ділення виконані)
@@ -89,9 +98,9 @@ class Case6CustomerServedByAllTests(BaseZlagodaTest):
         queries.execute("DELETE FROM employee WHERE id_employee != 'EMP_TEST'")
 
         queries.execute(
-            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-               VALUES ('CASH1', 'Касир1', 'А', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380001', 'К', 'В', '0'),
-                      ('CASH2', 'Касир2', 'Б', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380002', 'К', 'В', '0')"""
+            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
+               VALUES ('CASH1', 'Касир1', 'А', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380001', 'К', 'В', '0', ''),
+                      ('CASH2', 'Касир2', 'Б', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380002', 'К', 'В', '0', '')"""
         )
 
         queries.execute(
@@ -189,10 +198,10 @@ class Case9TopCashiersTests(BaseZlagodaTest):
 
         # Setup cashiers
         queries.execute(
-            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-                           VALUES ('TOP_A', 'Абсолют', 'А', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380001', 'К', 'В', '0'),
-                                  ('TOP_B', 'Богатир', 'Б', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380002', 'К', 'В', '0'),
-                                  ('LAZY_R', 'МалоЧеків', 'М', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380003', 'К', 'В', '0')"""
+            """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
+               VALUES ('TOP_A', 'Абсолют', 'А', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380001', 'К', 'В', '0', ''),
+                      ('TOP_B', 'Богатир', 'Б', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380002', 'К', 'В', '0', ''),
+                      ('LAZY_R', 'МалоЧеків', 'М', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380003', 'К', 'В', '0', '')"""
         )
 
         queries.execute(

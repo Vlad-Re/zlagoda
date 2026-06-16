@@ -13,9 +13,8 @@ export async function apiFetch(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
-
+  
   if (res.status === 401) {
-    window.location.href = '/login';
     throw new ApiError('Необхідна авторизація', 401);
   }
 

@@ -39,7 +39,7 @@ class ApiCrudTests(BaseZlagodaTest):
         # Expect 400 Bad Request, since DB constraint will reject the record
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.content)
-        self.assertIn("Constraint violation", data["error"])
+        self.assertIn("Порушення обмежень", data["error"])
 
     # ==========================================
     # КЕЙС 1: Категорія без товарів
@@ -415,6 +415,13 @@ class Case24CheckDeleteCascadeTests(BaseZlagodaTest):
 
 
 class Case25SelfReferentialPromoTests(BaseZlagodaTest):
+    def setUp(self):
+        super().setUp()
+        session = self.client.session
+        session["employee_id"] = "EMP_TEST"
+        session["role"] = "Manager"
+        session.save()
+
     def test_self_referential_promo_fails(self):
         """Case 25: A product cannot be its own promotional counterpart."""
         queries.execute("DELETE FROM store_product")

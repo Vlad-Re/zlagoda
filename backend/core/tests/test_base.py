@@ -40,5 +40,11 @@ class BaseZlagodaTest(TestCase):
         )
 
     def setUp(self):
-        """Initialize client before each individual test."""
+        """Initialize client before each individual test and log in as Manager."""
         self.client = Client()
+
+        # Глобальна авторизація для ВСІХ тестів
+        session = self.client.session
+        session["employee_id"] = "EMP_TEST"
+        session["role"] = "Manager"  # Менеджер має доступ до всього
+        session.save()

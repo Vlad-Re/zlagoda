@@ -17,6 +17,11 @@ class CheckTransactionTests(BaseZlagodaTest):
                VALUES ('123456789012', 100, 40.00, 10, FALSE)"""
         )
 
+        session = self.client.session
+        session["employee_id"] = "EMP_TEST"
+        session["role"] = "Cashier"
+        session.save()
+
     def test_successful_check_creation(self):
         """Test successful check creation (product deduction and correct sum calculation)."""
         payload = {
@@ -204,8 +209,6 @@ class CheckTransactionTests(BaseZlagodaTest):
         # vat = 30.9999 * 0.2 = 6.19998 (DB Decimal(13,4) will round this strictly to 6.2000)
         self.assertAlmostEqual(float(check["vat"]), 6.2000, places=4)
 
-        # ... попередні методи класу CheckTransactionTests ...
-
     def test_checkout_ignores_frontend_price_uses_db_price(self):
         """Case 26: Price Update During Checkout. The system must use the real DB price, ignoring frontend payload payload."""
         # Update price in DB right before checkout
@@ -349,27 +352,39 @@ class Case20RaceConditionTests(TransactionTestCase):
         )
         queries.execute(
             """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
-                           VALUES ('EMP_RACE', 'Тестер', 'Рейс', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380123456789', 'Київ', 'Вул', '0', %s)""",
+               VALUES ('EMP_RACE', 'Тестер', 'Рейс', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380123456789', 'Київ', 'Вул', '0', %s)""",
             ['']
         )
-
         queries.execute(
             """INSERT INTO store_product ("UPC", id_product, selling_price, products_number, promotional_product)
-                           VALUES ('RACE_UPC', 100, 50.00, 2, FALSE)"""
+               VALUES ('RACE_UPC', 100, 50.00, 2, FALSE)"""
         )
 
     def test_concurrent_purchases_respect_stock(self):
-        """Case 20: Race Condition. Two parallel requests try to buy 2 units each, but only 2 exist. FOR UPDATE must block and fail one."""
+        """Case 20: Race Condition. Two parallel requests try to buy 2 units each, but only 2 exist."""
         results = []
+
+        # Barrier to pause threads until both reach the exact same execution point
+        barrier = threading.Barrier(2)
 
         def make_purchase(check_number):
             try:
                 client = Client()
+
+                session = client.session
+                session["employee_id"] = "EMP_RACE"
+                session["role"] = "Cashier"
+                session.save()
+
                 payload = {
                     "check_number": check_number,
                     "id_employee": "EMP_RACE",
                     "products": [{"UPC": "RACE_UPC", "product_number": 2}],
                 }
+
+                # Both threads wait here. They fire the POST request at the exact same millisecond
+                barrier.wait()
+
                 res = client.post(
                     "/api/checks/",
                     data=json.dumps(payload),
@@ -391,7 +406,6 @@ class Case20RaceConditionTests(TransactionTestCase):
         self.assertIn(201, results)
         self.assertIn(400, results)
 
-        # Ensure stock never goes below 0 and is exactly 0 now
         stock = queries.fetch_one(
             "SELECT products_number FROM store_product WHERE \"UPC\" = 'RACE_UPC'"
         )
