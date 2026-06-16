@@ -1,50 +1,110 @@
 import json
+import uuid
 from datetime import datetime
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction, IntegrityError
+from django.contrib.auth.hashers import make_password, check_password
 from . import queries
+from .decorators import login_required_api, manager_required
 
 # ==========================================
 # ДОПОМІЖНІ ФУНКЦІЇ
 # ==========================================
 
+EMPLOYEE_SAFE_COLS = (
+    "id_employee, empl_surname, empl_name, empl_patronymic, empl_role, "
+    "salary, date_of_birth, date_of_start, phone_number, city, street, zip_code"
+)
+
 
 def validate_sort_column(sort_column, allowed_columns):
-    """Перевірка колонки для сортування (захист від SQL-ін'єкцій)."""
     if not sort_column or sort_column not in allowed_columns:
-        return allowed_columns[0]  # Значення за замовчуванням
+        return allowed_columns[0]
     return sort_column
 
 
-# Білі списки колонок для кожної таблиці
 EMP_SORT_COLS = ["empl_surname", "empl_name", "empl_role", "salary", "date_of_start"]
 CARD_SORT_COLS = ["cust_surname", "percent", "city"]
-STORE_PROD_SORT_COLS = ["products_number", "selling_price", '"UPC"']
+STORE_PROD_SORT_COLS = ["products_number", "selling_price", '"UPC"', "p.product_name"]
+
 
 # ==========================================
-# 1. CATEGORY VIEWS (Категорії)
+# AUTH VIEWS
 # ==========================================
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def login_view(request):
+    data = json.loads(request.body)
+    id_employee = data.get("id_employee", "").strip()
+    password = data.get("password", "")
+
+    if not id_employee or not password:
+        return JsonResponse({"error": "ID та пароль є обов'язковими"}, status=400)
+
+    employee = queries.get_employee_for_auth(id_employee)
+    if not employee or not check_password(password, employee["password_hash"]):
+        return JsonResponse({"error": "Невірний ID або пароль"}, status=401)
+
+    request.session["employee_id"] = employee["id_employee"]
+    request.session["role"] = employee["empl_role"]
+
+    return JsonResponse({
+        "id_employee": employee["id_employee"],
+        "role": employee["empl_role"],
+        "name": f"{employee['empl_surname']} {employee['empl_name']}",
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required_api
+def logout_view(request):
+    request.session.flush()
+    return JsonResponse({"message": "Вихід виконано"})
+
+
+@require_http_methods(["GET"])
+@login_required_api
+def me_view(request):
+    employee = queries.get_employee_profile(request.session["employee_id"])
+    if not employee:
+        request.session.flush()
+        return JsonResponse({"error": "Сесію анульовано"}, status=401)
+    employee["role"] = request.session["role"]
+    return JsonResponse(employee)
+
+
+# ==========================================
+# 1. CATEGORY VIEWS
+# ==========================================
+
+
+@csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "POST"])
 def category_list_create(request):
     if request.method == "GET":
         categories = queries.get_all_categories()
         return JsonResponse({"results": categories}, safe=False)
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
-        try:
-            queries.add_category(data["category_number"], data["category_name"])
-            return JsonResponse({"message": "Категорію успішно створено"}, status=201)
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+    # POST — manager only
+    if request.session.get("role") != "Manager":
+        return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
+
+    data = json.loads(request.body)
+    try:
+        queries.add_category(data["category_number"], data["category_name"])
+        return JsonResponse({"message": "Категорію успішно створено"}, status=201)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "PUT", "DELETE"])
 def category_detail(request, category_number):
     if request.method == "GET":
@@ -55,7 +115,10 @@ def category_detail(request, category_number):
             return JsonResponse({"error": "Категорію не знайдено"}, status=404)
         return JsonResponse(category)
 
-    elif request.method == "PUT":
+    if request.session.get("role") != "Manager":
+        return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
+
+    if request.method == "PUT":
         data = json.loads(request.body)
         try:
             queries.execute(
@@ -72,7 +135,7 @@ def category_detail(request, category_number):
             return JsonResponse({"message": "Категорію видалено"})
         except IntegrityError:
             return JsonResponse(
-                {"error": "Cannot delete: products are attached to this category."},
+                {"error": "Неможливо видалити: до категорії прив'язані товари."},
                 status=409,
             )
         except Exception as e:
@@ -80,67 +143,76 @@ def category_detail(request, category_number):
 
 
 # ==========================================
-# 2. EMPLOYEE VIEWS (Працівники)
+# 2. EMPLOYEE VIEWS
 # ==========================================
 
 
 @csrf_exempt
+@manager_required
 @require_http_methods(["GET", "POST"])
 def employee_list_create(request):
     if request.method == "GET":
         role = request.GET.get("role")
         sort = validate_sort_column(request.GET.get("sort"), EMP_SORT_COLS)
+        surname = request.GET.get("surname")
 
-        query = "SELECT * FROM employee WHERE 1=1"
+        query = f"SELECT {EMPLOYEE_SAFE_COLS} FROM employee WHERE 1=1"
         params = []
 
         if role:
             query += " AND empl_role = %s"
             params.append(role)
+        if surname:
+            query += " AND empl_surname ILIKE %s"
+            params.append(f"%{surname}%")
 
         query += f" ORDER BY {sort}"
         employees = queries.fetch_all(query, params)
-
         return JsonResponse({"results": employees}, safe=False)
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
-        try:
-            queries.execute(
-                """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_patronymic,
-                                         empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                [
-                    data["id_employee"],
-                    data["empl_surname"],
-                    data["empl_name"],
-                    data.get("empl_patronymic"),
-                    data["empl_role"],
-                    data["salary"],
-                    data["date_of_birth"],
-                    data["date_of_start"],
-                    data["phone_number"],
-                    data["city"],
-                    data["street"],
-                    data["zip_code"],
-                ],
-            )
-            return JsonResponse({"message": "Працівника створено"}, status=201)
-        except IntegrityError:
-            return JsonResponse(
-                {"error": "Constraint violation. Check age (>=18) or phone format."},
-                status=400,
-            )
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+    data = json.loads(request.body)
+    raw_password = data.get("password") or data["id_employee"]
+    try:
+        queries.execute(
+            f"""INSERT INTO employee
+                (id_employee, empl_surname, empl_name, empl_patronymic, empl_role,
+                 salary, date_of_birth, date_of_start, phone_number, city, street,
+                 zip_code, password_hash)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            [
+                data["id_employee"],
+                data["empl_surname"],
+                data["empl_name"],
+                data.get("empl_patronymic"),
+                data["empl_role"],
+                data["salary"],
+                data["date_of_birth"],
+                data["date_of_start"],
+                data["phone_number"],
+                data["city"],
+                data["street"],
+                data["zip_code"],
+                make_password(raw_password),
+            ],
+        )
+        return JsonResponse({"message": "Працівника створено"}, status=201)
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "Порушення обмежень. Перевірте вік (>=18) або формат телефону."},
+            status=400,
+        )
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
+@manager_required
 @require_http_methods(["GET", "PUT", "DELETE"])
 def employee_detail(request, id_employee):
     if request.method == "GET":
         employee = queries.fetch_one(
-            "SELECT * FROM employee WHERE id_employee = %s", [id_employee]
+            f"SELECT {EMPLOYEE_SAFE_COLS} FROM employee WHERE id_employee = %s",
+            [id_employee],
         )
         if not employee:
             return JsonResponse({"error": "Працівника не знайдено"}, status=404)
@@ -149,11 +221,18 @@ def employee_detail(request, id_employee):
     elif request.method == "PUT":
         data = json.loads(request.body)
         try:
+            extra_set = ""
+            extra_params = []
+            if data.get("password"):
+                extra_set = ", password_hash = %s"
+                extra_params = [make_password(data["password"])]
+
             queries.execute(
-                """UPDATE employee SET empl_surname = %s, empl_name = %s, empl_patronymic = %s,
-                                       empl_role = %s, salary = %s, date_of_birth = %s, date_of_start = %s,
-                                       phone_number = %s, city = %s, street = %s, zip_code = %s
-                   WHERE id_employee = %s""",
+                f"""UPDATE employee
+                    SET empl_surname = %s, empl_name = %s, empl_patronymic = %s,
+                        empl_role = %s, salary = %s, date_of_birth = %s, date_of_start = %s,
+                        phone_number = %s, city = %s, street = %s, zip_code = %s{extra_set}
+                    WHERE id_employee = %s""",
                 [
                     data.get("empl_surname"),
                     data.get("empl_name"),
@@ -166,6 +245,7 @@ def employee_detail(request, id_employee):
                     data.get("city"),
                     data.get("street"),
                     data.get("zip_code"),
+                    *extra_params,
                     id_employee,
                 ],
             )
@@ -188,17 +268,31 @@ def employee_detail(request, id_employee):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+@require_http_methods(["GET"])
+@manager_required
+def employee_search(request):
+    surname = request.GET.get("surname", "")
+    employees = queries.fetch_all(
+        "SELECT empl_surname, empl_name, phone_number, city, street, zip_code "
+        "FROM employee WHERE empl_surname ILIKE %s ORDER BY empl_surname",
+        [f"%{surname}%"],
+    )
+    return JsonResponse({"results": employees})
+
+
 # ==========================================
-# 3. CUSTOMER CARD VIEWS (Карти клієнтів)
+# 3. CUSTOMER CARD VIEWS
 # ==========================================
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "POST"])
 def customer_card_list_create(request):
     if request.method == "GET":
         percent = request.GET.get("percent")
         sort = validate_sort_column(request.GET.get("sort"), CARD_SORT_COLS)
+        surname = request.GET.get("surname")
 
         query = "SELECT * FROM customer_card WHERE 1=1"
         params = []
@@ -206,37 +300,40 @@ def customer_card_list_create(request):
         if percent:
             query += " AND percent = %s"
             params.append(percent)
+        if surname:
+            query += " AND cust_surname ILIKE %s"
+            params.append(f"%{surname}%")
 
         query += f" ORDER BY {sort}"
         cards = queries.fetch_all(query, params)
-
         return JsonResponse({"results": cards}, safe=False)
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
-        try:
-            queries.execute(
-                """INSERT INTO customer_card (card_number, cust_surname, cust_name, cust_patronymic,
-                                              phone_number, city, street, zip_code, percent)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                [
-                    data["card_number"],
-                    data["cust_surname"],
-                    data["cust_name"],
-                    data.get("cust_patronymic"),
-                    data["phone_number"],
-                    data.get("city"),
-                    data.get("street"),
-                    data.get("zip_code"),
-                    data["percent"],
-                ],
-            )
-            return JsonResponse({"message": "Картку клієнта створено"}, status=201)
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+    data = json.loads(request.body)
+    try:
+        queries.execute(
+            """INSERT INTO customer_card
+               (card_number, cust_surname, cust_name, cust_patronymic,
+                phone_number, city, street, zip_code, percent)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            [
+                data["card_number"],
+                data["cust_surname"],
+                data["cust_name"],
+                data.get("cust_patronymic"),
+                data["phone_number"],
+                data.get("city"),
+                data.get("street"),
+                data.get("zip_code"),
+                data["percent"],
+            ],
+        )
+        return JsonResponse({"message": "Картку клієнта створено"}, status=201)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "PUT", "DELETE"])
 def customer_card_detail(request, card_number):
     if request.method == "GET":
@@ -249,8 +346,9 @@ def customer_card_detail(request, card_number):
         data = json.loads(request.body)
         try:
             queries.execute(
-                """UPDATE customer_card SET cust_surname = %s, cust_name = %s, cust_patronymic = %s,
-                                            phone_number = %s, city = %s, street = %s, zip_code = %s, percent = %s
+                """UPDATE customer_card
+                   SET cust_surname = %s, cust_name = %s, cust_patronymic = %s,
+                       phone_number = %s, city = %s, street = %s, zip_code = %s, percent = %s
                    WHERE card_number = %s""",
                 [
                     data.get("cust_surname"),
@@ -269,6 +367,8 @@ def customer_card_detail(request, card_number):
             return JsonResponse({"error": str(e)}, status=400)
 
     elif request.method == "DELETE":
+        if request.session.get("role") != "Manager":
+            return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
         try:
             queries.execute(
                 "DELETE FROM customer_card WHERE card_number = %s", [card_number]
@@ -279,11 +379,12 @@ def customer_card_detail(request, card_number):
 
 
 # ==========================================
-# 4. PRODUCT VIEWS (Товари у довіднику)
+# 4. PRODUCT VIEWS
 # ==========================================
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "POST"])
 def product_list_create(request):
     if request.method == "GET":
@@ -291,7 +392,8 @@ def product_list_create(request):
         search = request.GET.get("search")
 
         query = """SELECT p.*, c.category_name FROM product p
-                                                        JOIN category c ON p.category_number = c.category_number WHERE 1=1"""
+                   JOIN category c ON p.category_number = c.category_number
+                   WHERE 1=1"""
         params = []
 
         if category:
@@ -305,38 +407,45 @@ def product_list_create(request):
         products = queries.fetch_all(query, params)
         return JsonResponse({"results": products}, safe=False)
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
-        try:
-            queries.execute(
-                """INSERT INTO product (id_product, category_number, product_name, characteristics)
-                   VALUES (%s, %s, %s, %s)""",
-                [
-                    data["id_product"],
-                    data["category_number"],
-                    data["product_name"],
-                    data["characteristics"],
-                ],
-            )
-            return JsonResponse({"message": "Товар створено"}, status=201)
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+    if request.session.get("role") != "Manager":
+        return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
+
+    data = json.loads(request.body)
+    try:
+        queries.execute(
+            """INSERT INTO product (id_product, category_number, product_name, characteristics)
+               VALUES (%s, %s, %s, %s)""",
+            [
+                data["id_product"],
+                data["category_number"],
+                data["product_name"],
+                data["characteristics"],
+            ],
+        )
+        return JsonResponse({"message": "Товар створено"}, status=201)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "PUT", "DELETE"])
 def product_detail(request, id_product):
     if request.method == "GET":
         product = queries.fetch_one(
             """SELECT p.*, c.category_name FROM product p
-                                                    JOIN category c ON p.category_number = c.category_number WHERE p.id_product = %s""",
+               JOIN category c ON p.category_number = c.category_number
+               WHERE p.id_product = %s""",
             [id_product],
         )
         if not product:
             return JsonResponse({"error": "Товар не знайдено"}, status=404)
         return JsonResponse(product)
 
-    elif request.method == "PUT":
+    if request.session.get("role") != "Manager":
+        return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
+
+    if request.method == "PUT":
         data = json.loads(request.body)
         try:
             queries.execute(
@@ -359,9 +468,7 @@ def product_detail(request, id_product):
             return JsonResponse({"message": "Товар видалено"})
         except IntegrityError:
             return JsonResponse(
-                {
-                    "error": "Неможливо видалити: товар уже є на вітрині (store_product)."
-                },
+                {"error": "Неможливо видалити: товар уже є на вітрині."},
                 status=409,
             )
         except Exception as e:
@@ -369,21 +476,23 @@ def product_detail(request, id_product):
 
 
 # ==========================================
-# 5. STORE PRODUCT VIEWS (Товари на вітрині)
+# 5. STORE PRODUCT VIEWS
 # ==========================================
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "POST"])
 def store_product_list_create(request):
     if request.method == "GET":
         promotional = request.GET.get("promotional")
         sort = validate_sort_column(request.GET.get("sort"), STORE_PROD_SORT_COLS)
+        search = request.GET.get("search")
 
-        query = """SELECT sp.*, p.product_name, c.category_name
+        query = """SELECT sp.*, p.product_name, p.characteristics, c.category_name
                    FROM store_product sp
-                            JOIN product p ON sp.id_product = p.id_product
-                            JOIN category c ON p.category_number = c.category_number
+                   JOIN product p ON sp.id_product = p.id_product
+                   JOIN category c ON p.category_number = c.category_number
                    WHERE 1=1"""
         params = []
 
@@ -391,51 +500,64 @@ def store_product_list_create(request):
             query += " AND sp.promotional_product = TRUE"
         elif promotional == "false":
             query += " AND sp.promotional_product = FALSE"
+        if search:
+            query += " AND p.product_name ILIKE %s"
+            params.append(f"%{search}%")
 
         query += f" ORDER BY {sort}"
         products = queries.fetch_all(query, params)
-
         return JsonResponse({"results": products}, safe=False)
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
-        try:
-            queries.execute(
-                """INSERT INTO store_product ("UPC", "UPC_prom", id_product, selling_price, products_number, promotional_product)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                [
-                    data["UPC"],
-                    data.get("UPC_prom"),
-                    data["id_product"],
-                    data["selling_price"],
-                    data["products_number"],
-                    data["promotional_product"],
-                ],
-            )
-            return JsonResponse({"message": "Товар додано до магазину"}, status=201)
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=400)
+    if request.session.get("role") != "Manager":
+        return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
+
+    data = json.loads(request.body)
+    try:
+        queries.execute(
+            """INSERT INTO store_product ("UPC", "UPC_prom", id_product, selling_price, products_number, promotional_product)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            [
+                data["UPC"],
+                data.get("UPC_prom"),
+                data["id_product"],
+                data["selling_price"],
+                data["products_number"],
+                data["promotional_product"],
+            ],
+        )
+        return JsonResponse({"message": "Товар додано до магазину"}, status=201)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "PUT", "DELETE"])
 def store_product_detail(request, upc):
     if request.method == "GET":
         product = queries.fetch_one(
-            """SELECT sp.*, p.product_name FROM store_product sp
-                                                    JOIN product p ON sp.id_product = p.id_product WHERE sp."UPC" = %s""",
+            """SELECT sp.*, p.product_name, p.characteristics, c.category_name
+               FROM store_product sp
+               JOIN product p ON sp.id_product = p.id_product
+               JOIN category c ON p.category_number = c.category_number
+               WHERE sp."UPC" = %s""",
             [upc],
         )
         if not product:
             return JsonResponse({"error": "Товар не знайдено"}, status=404)
         return JsonResponse(product)
 
-    elif request.method == "PUT":
+    if request.session.get("role") != "Manager":
+        return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
+
+    if request.method == "PUT":
         data = json.loads(request.body)
         try:
             queries.execute(
-                """UPDATE store_product SET "UPC_prom" = %s, id_product = %s, selling_price = %s,
-                                            products_number = %s, promotional_product = %s WHERE "UPC" = %s""",
+                """UPDATE store_product
+                   SET "UPC_prom" = %s, id_product = %s, selling_price = %s,
+                       products_number = %s, promotional_product = %s
+                   WHERE "UPC" = %s""",
                 [
                     data.get("UPC_prom"),
                     data.get("id_product"),
@@ -455,7 +577,7 @@ def store_product_detail(request, upc):
             return JsonResponse({"message": "Товар видалено з магазину"})
         except IntegrityError:
             return JsonResponse(
-                {"error": "Cannot delete: product is already included in checks."},
+                {"error": "Неможливо видалити: товар входить до складу чеків."},
                 status=409,
             )
         except Exception as e:
@@ -463,25 +585,36 @@ def store_product_detail(request, upc):
 
 
 # ==========================================
-# 6. CHECK VIEWS (Чеки та Продажі) - ТРАНЗАКЦІЯ
+# 6. CHECK VIEWS
 # ==========================================
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "POST"])
 def check_list_create(request):
     if request.method == "GET":
-        id_employee = request.GET.get("id_employee")
+        role = request.session.get("role")
+        session_emp = request.session.get("employee_id")
+
         date_from = request.GET.get("date_from")
         date_to = request.GET.get("date_to")
 
-        query = """SELECT c.*, e.empl_surname, e.empl_name FROM "check" c
-                                                                    JOIN employee e ON c.id_employee = e.id_employee WHERE 1=1"""
+        query = """SELECT c.*, e.empl_surname, e.empl_name
+                   FROM "check" c
+                   JOIN employee e ON c.id_employee = e.id_employee
+                   WHERE 1=1"""
         params = []
 
-        if id_employee:
+        if role == "Cashier":
             query += " AND c.id_employee = %s"
-            params.append(id_employee)
+            params.append(session_emp)
+        else:
+            id_employee = request.GET.get("id_employee")
+            if id_employee:
+                query += " AND c.id_employee = %s"
+                params.append(id_employee)
+
         if date_from:
             query += " AND c.print_date >= %s"
             params.append(date_from)
@@ -491,127 +624,121 @@ def check_list_create(request):
 
         query += " ORDER BY c.print_date DESC"
         checks = queries.fetch_all(query, params)
-
         return JsonResponse({"results": checks}, safe=False)
 
-    elif request.method == "POST":
-        data = json.loads(request.body)
+    # POST — create check
+    data = json.loads(request.body)
 
-        check_number = data.get("check_number")
-        id_employee = data.get("id_employee")
-        card_number = data.get("card_number")
-        print_date = data.get("print_date", datetime.now())
-        products = data.get("products", [])
+    role = request.session.get("role")
+    session_emp = request.session.get("employee_id")
 
-        if not products:
-            return JsonResponse({"error": "Чек не може бути порожнім"}, status=400)
+    if role == "Cashier":
+        id_employee = session_emp
+    else:
+        id_employee = data.get("id_employee") or session_emp
 
-        try:
-            with transaction.atomic():
-                sum_total = 0
-                processed_products = []
+    check_number = data.get("check_number") or f"CH{uuid.uuid4().hex[:8].upper()}"
+    card_number = data.get("card_number") or None
+    print_date = data.get("print_date") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    products = data.get("products", [])
 
-                # 1. Збираємо АКТУАЛЬНІ ціни та рахуємо загальну суму ДО створення чека
-                for product in products:
-                    actual_product = queries.fetch_one(
-                        'SELECT selling_price FROM store_product WHERE "UPC" = %s FOR UPDATE',
-                        [product["UPC"]],
+    if not products:
+        return JsonResponse({"error": "Чек не може бути порожнім"}, status=400)
+
+    try:
+        with transaction.atomic():
+            sum_total = 0
+            processed_products = []
+
+            for product in products:
+                actual_product = queries.fetch_one(
+                    'SELECT selling_price, products_number FROM store_product WHERE "UPC" = %s FOR UPDATE',
+                    [product["UPC"]],
+                )
+                if not actual_product:
+                    raise Exception(f"Товар з UPC {product['UPC']} не знайдено.")
+
+                qty = int(product["product_number"])
+                if actual_product["products_number"] < qty:
+                    raise Exception(
+                        f"Недостатньо товару {product['UPC']} на складі "
+                        f"(є {actual_product['products_number']}, потрібно {qty})."
                     )
-                    if not actual_product:
-                        raise Exception(f"Товар з UPC {product['UPC']} не знайдено.")
 
-                    real_price = float(actual_product["selling_price"])
-                    qty = float(product["product_number"])
-                    sum_total += qty * real_price
+                real_price = float(actual_product["selling_price"])
+                sum_total += qty * real_price
+                processed_products.append({
+                    "UPC": product["UPC"],
+                    "product_number": qty,
+                    "selling_price": real_price,
+                })
 
-                    # Зберігаємо реальні дані для наступного кроку
-                    processed_products.append(
-                        {
-                            "UPC": product["UPC"],
-                            "product_number": product["product_number"],
-                            "selling_price": real_price,
-                        }
-                    )
+            vat = sum_total * 0.2
 
-                vat = sum_total * 0.2
+            queries.execute(
+                """INSERT INTO "check" (check_number, id_employee, card_number, print_date, sum_total, vat)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                [check_number, id_employee, card_number, print_date, sum_total, vat],
+            )
 
-                # 2. Створюємо шапку чека (тепер маємо валідні sum_total та vat)
+            for pp in processed_products:
                 queries.execute(
-                    """
-                    INSERT INTO "check" (check_number, id_employee, card_number, print_date, sum_total, vat)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    [
-                        check_number,
-                        id_employee,
-                        card_number,
-                        print_date,
-                        sum_total,
-                        vat,
-                    ],
+                    """INSERT INTO sale ("UPC", check_number, product_number, selling_price)
+                       VALUES (%s, %s, %s, %s)""",
+                    [pp["UPC"], check_number, pp["product_number"], pp["selling_price"]],
+                )
+                queries.execute(
+                    'UPDATE store_product SET products_number = products_number - %s WHERE "UPC" = %s',
+                    [pp["product_number"], pp["UPC"]],
                 )
 
-                # 3. Записуємо кожен товар у Sale і віднімаємо кількість зі складу
-                for pp in processed_products:
-                    queries.execute(
-                        """
-                        INSERT INTO sale ("UPC", check_number, product_number, selling_price)
-                        VALUES (%s, %s, %s, %s)
-                        """,
-                        [
-                            pp["UPC"],
-                            check_number,
-                            pp["product_number"],
-                            pp["selling_price"],
-                        ],
-                    )
-
-                    queries.execute(
-                        """
-                        UPDATE store_product
-                        SET products_number = products_number - %s
-                        WHERE "UPC" = %s
-                        """,
-                        [pp["product_number"], pp["UPC"]],
-                    )
-
-            return JsonResponse(
-                {"message": "Чек успішно створено", "check_number": check_number},
-                status=201,
-            )
-
-        except IntegrityError:
-            return JsonResponse(
-                {"error": "Недостатньо товару на складі або невірні дані чека."},
-                status=400,
-            )
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse(
+            {"message": "Чек успішно створено", "check_number": check_number},
+            status=201,
+        )
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "Недостатньо товару на складі або невірні дані чека."},
+            status=400,
+        )
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 @csrf_exempt
+@login_required_api
 @require_http_methods(["GET", "DELETE"])
 def check_detail(request, check_number):
     if request.method == "GET":
         check = queries.fetch_one(
-            """SELECT c.*, e.empl_surname, e.empl_name FROM "check" c
-                                                                JOIN employee e ON c.id_employee = e.id_employee WHERE c.check_number = %s""",
+            """SELECT c.*, e.empl_surname, e.empl_name
+               FROM "check" c
+               JOIN employee e ON c.id_employee = e.id_employee
+               WHERE c.check_number = %s""",
             [check_number],
         )
         if not check:
             return JsonResponse({"error": "Чек не знайдено"}, status=404)
 
+        if (
+            request.session.get("role") == "Cashier"
+            and check["id_employee"] != request.session.get("employee_id")
+        ):
+            return JsonResponse({"error": "Доступ заборонено"}, status=403)
+
         items = queries.fetch_all(
-            """SELECT s.product_number, s.selling_price, p.product_name
+            """SELECT s."UPC", s.product_number, s.selling_price, p.product_name
                FROM sale s
-                        JOIN store_product sp ON s."UPC" = sp."UPC"
-                        JOIN product p ON sp.id_product = p.id_product
+               JOIN store_product sp ON s."UPC" = sp."UPC"
+               JOIN product p ON sp.id_product = p.id_product
                WHERE s.check_number = %s""",
             [check_number],
         )
         return JsonResponse({"check": check, "items": items})
 
     elif request.method == "DELETE":
+        if request.session.get("role") != "Manager":
+            return JsonResponse({"error": "Доступ лише для менеджерів"}, status=403)
         try:
             queries.execute(
                 'DELETE FROM "check" WHERE check_number = %s', [check_number]
@@ -622,11 +749,12 @@ def check_detail(request, check_number):
 
 
 # ==========================================
-# 7. REPORT VIEWS (Звіти)
+# 7. REPORT VIEWS
 # ==========================================
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_sales_revenue(request):
     id_employee = request.GET.get("id_employee")
     start = request.GET.get("start")
@@ -646,23 +774,22 @@ def report_sales_revenue(request):
         params.append(end)
 
     result = queries.fetch_one(query, params)
-    return JsonResponse(
-        {
-            "total_revenue": (
-                result["total_revenue"] if result and result["total_revenue"] else 0
-            )
-        }
-    )
+    return JsonResponse({
+        "total_revenue": result["total_revenue"] if result and result["total_revenue"] else 0
+    })
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_product_volume(request):
     upc = request.GET.get("upc")
     start = request.GET.get("start")
     end = request.GET.get("end")
 
-    query = """SELECT SUM(s.product_number) as total_volume FROM sale s
-                                                                     JOIN "check" c ON s.check_number = c.check_number WHERE 1=1"""
+    query = """SELECT SUM(s.product_number) as total_volume
+               FROM sale s
+               JOIN "check" c ON s.check_number = c.check_number
+               WHERE 1=1"""
     params = []
 
     if upc:
@@ -676,21 +803,85 @@ def report_product_volume(request):
         params.append(end)
 
     result = queries.fetch_one(query, params)
-    return JsonResponse(
-        {
-            "total_volume": (
-                result["total_volume"] if result and result["total_volume"] else 0
-            )
-        }
-    )
+    return JsonResponse({
+        "total_volume": result["total_volume"] if result and result["total_volume"] else 0
+    })
 
 
 @require_http_methods(["GET"])
+@manager_required
+def report_checks_in_period(request):
+    """Чеки касира/усіх за період з позиціями."""
+    id_employee = request.GET.get("id_employee")
+    start = request.GET.get("start")
+    end = request.GET.get("end")
+
+    query = """
+        SELECT c.check_number, c.print_date, c.sum_total, c.vat,
+               e.empl_surname, e.empl_name,
+               cc.cust_surname, cc.cust_name
+        FROM "check" c
+        JOIN employee e ON c.id_employee = e.id_employee
+        LEFT JOIN customer_card cc ON c.card_number = cc.card_number
+        WHERE 1=1
+    """
+    params = []
+
+    if id_employee:
+        query += " AND c.id_employee = %s"
+        params.append(id_employee)
+    if start:
+        query += " AND c.print_date >= %s"
+        params.append(start)
+    if end:
+        query += " AND c.print_date <= %s"
+        params.append(end)
+
+    query += " ORDER BY c.print_date DESC"
+    checks = queries.fetch_all(query, params)
+
+    for ch in checks:
+        ch["items"] = queries.fetch_all(
+            """SELECT s.product_number, s.selling_price, p.product_name, s."UPC"
+               FROM sale s
+               JOIN store_product sp ON s."UPC" = sp."UPC"
+               JOIN product p ON sp.id_product = p.id_product
+               WHERE s.check_number = %s""",
+            [ch["check_number"]],
+        )
+
+    return JsonResponse({"results": checks})
+
+
+@require_http_methods(["GET"])
+@manager_required
 def report_total_sold_per_product(request):
-    return JsonResponse({"results": queries.get_total_sold_per_product()}, safe=False)
+    start = request.GET.get("start")
+    end = request.GET.get("end")
+
+    query = """
+        SELECT p.product_name, SUM(s.product_number) AS total_sold
+        FROM product p
+        INNER JOIN store_product sp ON p.id_product = sp.id_product
+        INNER JOIN sale s ON sp."UPC" = s."UPC"
+        INNER JOIN "check" c ON s.check_number = c.check_number
+        WHERE 1=1
+    """
+    params = []
+
+    if start:
+        query += " AND c.print_date >= %s"
+        params.append(start)
+    if end:
+        query += " AND c.print_date <= %s"
+        params.append(end)
+
+    query += " GROUP BY p.product_name ORDER BY total_sold DESC"
+    return JsonResponse({"results": queries.fetch_all(query, params)})
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_customers_served_by_all_cashiers(request):
     return JsonResponse(
         {"results": queries.get_customers_served_by_all_cashiers()}, safe=False
@@ -698,6 +889,7 @@ def report_customers_served_by_all_cashiers(request):
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_top_cashiers(request):
     start = request.GET.get("start", "1970-01-01")
     end = request.GET.get("end", "2100-01-01")
@@ -707,6 +899,7 @@ def report_top_cashiers(request):
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_categories_all_products_sold(request):
     return JsonResponse(
         {"results": queries.get_categories_with_all_products_sold()}, safe=False
@@ -714,11 +907,13 @@ def report_categories_all_products_sold(request):
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_total_sold_per_category(request):
     return JsonResponse({"results": queries.get_total_sold_per_category()}, safe=False)
 
 
 @require_http_methods(["GET"])
+@manager_required
 def report_employees_served_all_customers(request):
     return JsonResponse(
         {"results": queries.get_employees_who_served_all_card_customers()}, safe=False
@@ -726,17 +921,43 @@ def report_employees_served_all_customers(request):
 
 
 # ==========================================
-# 8. UI DROPDOWNS VIEW (Для дружнього інтерфейсу)
+# 8. UI DROPDOWNS
 # ==========================================
 
 
 @require_http_methods(["GET"])
+@login_required_api
 def ui_dropdowns(request, entity):
     entity_map = {
-        "categories": "SELECT category_number as id, category_name as name FROM category ORDER BY category_name",
-        "employees": "SELECT id_employee as id, CONCAT(empl_surname, ' ', empl_name) as name FROM employee ORDER BY empl_surname",
-        "products": "SELECT id_product as id, product_name as name FROM product ORDER BY product_name",
-        "customer-cards": "SELECT card_number as id, CONCAT(cust_surname, ' ', cust_name) as name FROM customer_card ORDER BY cust_surname",
+        "categories": (
+            "SELECT category_number as id, category_name as name "
+            "FROM category ORDER BY category_name"
+        ),
+        "employees": (
+            "SELECT id_employee as id, CONCAT(empl_surname, ' ', empl_name) as name "
+            "FROM employee ORDER BY empl_surname"
+        ),
+        "cashiers": (
+            "SELECT id_employee as id, CONCAT(empl_surname, ' ', empl_name) as name "
+            "FROM employee WHERE empl_role = 'Cashier' ORDER BY empl_surname"
+        ),
+        "products": (
+            "SELECT id_product as id, product_name as name "
+            "FROM product ORDER BY product_name"
+        ),
+        "customer-cards": (
+            "SELECT card_number as id, CONCAT(cust_surname, ' ', cust_name) as name "
+            "FROM customer_card ORDER BY cust_surname"
+        ),
+        "store-products": (
+            """SELECT sp."UPC" as id,
+                      CONCAT(p.product_name, ' [', sp."UPC", '] — ', sp.selling_price, ' грн') as name,
+                      sp.selling_price, sp.products_number, p.product_name
+               FROM store_product sp
+               JOIN product p ON sp.id_product = p.id_product
+               WHERE sp.products_number > 0
+               ORDER BY p.product_name"""
+        ),
     }
 
     query = entity_map.get(entity)

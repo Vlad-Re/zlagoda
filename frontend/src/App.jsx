@@ -1,207 +1,77 @@
-import { useState, useEffect } from 'react'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Layout from './components/Layout';
+import Login from './pages/Login';
 
-function App() {
-  const [activeTab, setActiveTab] = useState('categories')
-  const [data, setData] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+// Manager pages
+import Employees    from './pages/manager/Employees';
+import Categories   from './pages/manager/Categories';
+import Products     from './pages/manager/Products';
+import StoreProducts from './pages/manager/StoreProducts';
+import CustomerCardsManager from './pages/manager/CustomerCards';
+import Checks       from './pages/manager/Checks';
+import Reports      from './pages/manager/Reports';
 
-  // Стан для звітів
-  const [reportResult, setReportResult] = useState(null)
-  const [activeReport, setActiveReport] = useState(null)
+// Cashier pages
+import CashierProducts      from './pages/cashier/Products';
+import CashierCustomerCards from './pages/cashier/CustomerCards';
+import NewCheck     from './pages/cashier/NewCheck';
+import MyChecks     from './pages/cashier/MyChecks';
+import Profile      from './pages/cashier/Profile';
 
-  const endpoints = {
-    categories: '/api/categories/',
-    products: '/api/products/',
-    employees: '/api/employees/',
-    cards: '/api/customer-cards/',
-    checks: '/api/checks/'
-  }
-
-  const fetchData = async (tab) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await fetch(endpoints[tab])
-      if (!response.ok) {
-        throw new Error(`Помилка завантаження: ${response.status} ${response.statusText}`)
-      }
-      const result = await response.json()
-      // Django REST Framework зазвичай повертає { results: [...] } або просто масив
-      setData(result.results || result)
-    } catch (err) {
-      setError(err.message)
-      setData([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchData(activeTab)
-  }, [activeTab])
-
-  const runReport = async (reportName, url) => {
-    setActiveReport(reportName)
-    setReportResult(null)
-    try {
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`Помилка звіту: ${response.status}`)
-      }
-      const data = await response.json()
-      setReportResult(data)
-    } catch (err) {
-      setReportResult({ error: err.message })
-    }
-  }
-
-  // Динамічне визначення колонок для таблиці
-  const getTableHeaders = () => {
-    if (data.length === 0) return []
-    return Object.keys(data[0])
-  }
-
-  return (
-    <div className="app-container">
-      <header>
-        <h1>Панель моніторингу «Злагода»</h1>
-        <p>Швидкий перегляд даних та аналітичних звітів з вашого Django бекенду</p>
-      </header>
-
-      {/* Навігація по таблицях */}
-      <div className="nav-tabs">
-        <button
-          className={`tab-btn ${activeTab === 'categories' ? 'active' : ''}`}
-          onClick={() => setActiveTab('categories')}
-        >
-          Категорії
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'products' ? 'active' : ''}`}
-          onClick={() => setActiveTab('products')}
-        >
-          Товари
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'employees' ? 'active' : ''}`}
-          onClick={() => setActiveTab('employees')}
-        >
-          Працівники
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'cards' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cards')}
-        >
-          Картки клієнтів
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'checks' ? 'active' : ''}`}
-          onClick={() => setActiveTab('checks')}
-        >
-          Чеки
-        </button>
-      </div>
-
-      {/* Основний контент таблиць */}
-      <section className="content-section">
-        <div className="section-header">
-          <h2>
-            Дані: {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
-          </h2>
-          <button className="refresh-btn" onClick={() => fetchData(activeTab)}>
-            Оновити
-          </button>
-        </div>
-
-        {error && <div className="error-message">⚠️ {error}</div>}
-
-        {loading ? (
-          <div className="loading">Завантаження даних з сервера...</div>
-        ) : data.length > 0 ? (
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  {getTableHeaders().map((header) => (
-                    <th key={header}>{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((row, index) => (
-                  <tr key={index}>
-                    {getTableHeaders().map((header) => (
-                      <td key={header}>
-                        {typeof row[header] === 'object' && row[header] !== null
-                          ? JSON.stringify(row[header])
-                          : String(row[header] ?? '')}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">Немає даних для відображення. Спробуйте запустити seed_db або додати записи.</div>
-        )}
-      </section>
-
-      {/* Секція аналітичних звітів */}
-      <section className="content-section">
-        <h2>Аналітичні звіти (SQL запити)</h2>
-        <p style={{ color: 'var(--text-muted)' }}>Запуск складних аналітичних запитів та реляційного ділення:</p>
-
-        <div className="reports-grid">
-          <div className="report-card">
-            <h3>Топ касирів</h3>
-            <p>Отримати список касирів, сортованих за сумою продажів за весь час.</p>
-            <button
-              className="report-btn"
-              onClick={() => runReport('Топ касирів', '/api/reports/top-cashiers/')}
-            >
-              Запустити звіт
-            </button>
-          </div>
-
-          <div className="report-card">
-            <h3>Продажі по категоріях</h3>
-            <p>Загальна кількість проданих товарів та виручка для кожної категорії.</p>
-            <button
-              className="report-btn"
-              onClick={() => runReport('Продажі по категоріях', '/api/reports/total-sold-per-category/')}
-            >
-              Запустити звіт
-            </button>
-          </div>
-
-          <div className="report-card">
-            <h3>Клієнти у всіх касирів</h3>
-            <p>Пошук постійних покупців, які обслуговувалися абсолютно у кожного касира.</p>
-            <button
-              className="report-btn"
-              onClick={() => runReport('Клієнти у всіх касирів', '/api/reports/customers-served-by-all-cashiers/')}
-            >
-              Запустити звіт
-            </button>
-          </div>
-        </div>
-
-        {activeReport && (
-          <div className="report-result">
-            <h4>Результат звіту: {activeReport}</h4>
-            <pre>
-              {reportResult
-                ? JSON.stringify(reportResult, null, 2)
-                : 'Виконується запит...'}
-            </pre>
-          </div>
-        )}
-      </section>
-    </div>
-  )
+function ProtectedRoute({ children, requiredRole }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading">Завантаження...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (requiredRole && user.role !== requiredRole) return <Navigate to="/" replace />;
+  return children;
 }
 
-export default App
+function RootRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading">Завантаження...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'Manager') return <Navigate to="/manager/employees" replace />;
+  return <Navigate to="/cashier/products" replace />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<RootRedirect />} />
+
+          {/* Manager routes */}
+          <Route path="/manager" element={
+            <ProtectedRoute requiredRole="Manager"><Layout /></ProtectedRoute>
+          }>
+            <Route path="employees"      element={<Employees />} />
+            <Route path="categories"     element={<Categories />} />
+            <Route path="products"       element={<Products />} />
+            <Route path="store-products" element={<StoreProducts />} />
+            <Route path="customer-cards" element={<CustomerCardsManager />} />
+            <Route path="checks"         element={<Checks />} />
+            <Route path="reports"        element={<Reports />} />
+            <Route index element={<Navigate to="employees" replace />} />
+          </Route>
+
+          {/* Cashier routes (also accessible by Manager) */}
+          <Route path="/cashier" element={
+            <ProtectedRoute><Layout /></ProtectedRoute>
+          }>
+            <Route path="products"       element={<CashierProducts />} />
+            <Route path="customer-cards" element={<CashierCustomerCards />} />
+            <Route path="new-check"      element={<NewCheck />} />
+            <Route path="my-checks"      element={<MyChecks />} />
+            <Route path="profile"        element={<Profile />} />
+            <Route index element={<Navigate to="products" replace />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}

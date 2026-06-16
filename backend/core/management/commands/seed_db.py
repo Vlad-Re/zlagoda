@@ -2,6 +2,7 @@ import random
 from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
 from django.db import connection
+from django.contrib.auth.hashers import make_password
 
 
 class Command(BaseCommand):
@@ -90,7 +91,7 @@ class Command(BaseCommand):
                 store_products,
             )
 
-            # 4. Employees (10)
+            # 4. Employees (10) — password = id_employee (e.g. EMP01)
             # EMP10 has 0 checks (Safe Deletion Test)
             employees = []
             roles = ["Manager", "Manager"] + ["Cashier"] * 8
@@ -112,12 +113,13 @@ class Command(BaseCommand):
                         "Kyiv",
                         f"Street {i}",
                         f"010{i:02d}",
+                        make_password(emp_id),
                     )
                 )
             cursor.executemany(
                 """
-                               INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                               INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code, password_hash)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                """,
                 employees,
             )

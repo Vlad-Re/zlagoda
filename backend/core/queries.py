@@ -224,3 +224,28 @@ def get_employees_who_served_all_card_customers():
             ); \
             """
     return fetch_all(query)
+
+
+# ==========================================
+# AUTH QUERIES
+# ==========================================
+
+EMPLOYEE_SAFE_COLS = (
+    "id_employee, empl_surname, empl_name, empl_patronymic, empl_role, "
+    "salary, date_of_birth, date_of_start, phone_number, city, street, zip_code"
+)
+
+
+def get_employee_for_auth(id_employee):
+    return fetch_one(
+        "SELECT id_employee, empl_role, empl_surname, empl_name, password_hash "
+        "FROM employee WHERE id_employee = %s",
+        [id_employee],
+    )
+
+
+def get_employee_profile(id_employee):
+    return fetch_one(
+        f"SELECT {EMPLOYEE_SAFE_COLS} FROM employee WHERE id_employee = %s",
+        [id_employee],
+    )

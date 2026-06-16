@@ -78,6 +78,7 @@ class Employee(models.Model):
     city = models.CharField(max_length=50)
     street = models.CharField(max_length=50)
     zip_code = models.CharField(max_length=9)
+    password_hash = models.CharField(max_length=128, default='')
 
     class Meta:
         db_table = "employee"
