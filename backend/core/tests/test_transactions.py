@@ -2,6 +2,7 @@ import json
 import threading
 from django.test import TransactionTestCase, Client
 from django.core.management import call_command
+from django.db import connection
 
 from core import queries
 from .test_base import BaseZlagodaTest
@@ -257,21 +258,41 @@ class CheckTransactionTests(BaseZlagodaTest):
         self.assertEqual(float(check["vat"]), 0.00)
 
     def test_create_check_invalid_card_fails(self):
-        """Case 29: Invalid Foreign Key. Creating a check with a non-existent card returns 400 safely without crashing."""
+        """Case 29: Invalid Foreign Key. Creating a check with a non-existent card returns 400 safely."""
+
+        # 1. Очищення БД (якщо це не винесено у метод tearDown/setUp)
+        queries.execute('DELETE FROM "check"')
+        queries.execute("DELETE FROM store_product")
+
+        # 2. Сетап: Додаємо товар
+        queries.execute(
+            """INSERT INTO store_product ("UPC", id_product, selling_price, products_number, promotional_product)
+               VALUES ('123456789012', 100, 40.00, 10, FALSE)"""
+        )
+
+        # 3. Підготовка даних
         payload = {
-            "check_number": "CH_BAD_CARD",
+            "check_number": "BAD_CHK",
             "id_employee": "EMP_TEST",
-            "card_number": "GHOST_CARD",  # Does not exist in DB
+            "card_number": "GHOST_CARD",
             "products": [{"UPC": "123456789012", "product_number": 1}],
         }
 
+        # 4. Виконання запиту (ТУТ ДОДАНО json.dumps)
         response = self.client.post(
             "/api/checks/", data=json.dumps(payload), content_type="application/json"
         )
-        self.assertEqual(response.status_code, 400)
+
+        # 5. Перевірки
+        self.assertEqual(
+            response.status_code,
+            400,
+            f"Очікувався 400 статус, але отримано {response.status_code}. Тіло: {response.content.decode()}"
+        )
 
         check = queries.fetch_one(
-            "SELECT * FROM \"check\" WHERE check_number = 'CH_BAD_CARD'"
+            'SELECT * FROM "check" WHERE check_number = %s',
+            [payload["check_number"]]
         )
         self.assertIsNone(check)
 
@@ -341,18 +362,21 @@ class Case20RaceConditionTests(TransactionTestCase):
         results = []
 
         def make_purchase(check_number):
-            client = Client()
-            payload = {
-                "check_number": check_number,
-                "id_employee": "EMP_RACE",
-                "products": [{"UPC": "RACE_UPC", "product_number": 2}],
-            }
-            res = client.post(
-                "/api/checks/",
-                data=json.dumps(payload),
-                content_type="application/json",
-            )
-            results.append(res.status_code)
+            try:
+                client = Client()
+                payload = {
+                    "check_number": check_number,
+                    "id_employee": "EMP_RACE",
+                    "products": [{"UPC": "RACE_UPC", "product_number": 2}],
+                }
+                res = client.post(
+                    "/api/checks/",
+                    data=json.dumps(payload),
+                    content_type="application/json",
+                )
+                results.append(res.status_code)
+            finally:
+                connection.close()
 
         t1 = threading.Thread(target=make_purchase, args=("CHK_R1",))
         t2 = threading.Thread(target=make_purchase, args=("CHK_R2",))

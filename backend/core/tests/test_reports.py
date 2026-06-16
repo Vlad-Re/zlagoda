@@ -81,36 +81,35 @@ class Case5RelationalDivisionTests(BaseZlagodaTest):
 class Case6CustomerServedByAllTests(BaseZlagodaTest):
     def setUp(self):
         super().setUp()
-        # Clean up transactions and secondary entities
+
+        queries.execute("DELETE FROM sale")
         queries.execute('DELETE FROM "check"')
         queries.execute("DELETE FROM customer_card")
+
         queries.execute("DELETE FROM employee WHERE id_employee != 'EMP_TEST'")
 
-        # Create 2 Cashiers
         queries.execute(
             """INSERT INTO employee (id_employee, empl_surname, empl_name, empl_role, salary, date_of_birth, date_of_start, phone_number, city, street, zip_code)
-                           VALUES ('CASH1', 'Касир1', 'А', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380001', 'К', 'В', '0'),
-                                  ('CASH2', 'Касир2', 'Б', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380002', 'К', 'В', '0')"""
+               VALUES ('CASH1', 'Касир1', 'А', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380001', 'К', 'В', '0'),
+                      ('CASH2', 'Касир2', 'Б', 'Cashier', 10000, '2000-01-01', '2026-01-01', '+380002', 'К', 'В', '0')"""
         )
 
-        # Create 2 Customer Cards
         queries.execute(
             """INSERT INTO customer_card (card_number, cust_surname, cust_name, phone_number, percent)
-                           VALUES ('CARD_ALL', 'Улюбленець', 'У', '+380003', 5),
-                                  ('CARD_SOME', 'Випадковий', 'В', '+380004', 5)"""
+               VALUES ('CARD_ALL', 'Улюбленець', 'У', '+380003', 5),
+                      ('CARD_SOME', 'Випадковий', 'В', '+380004', 5)"""
         )
 
-        # CARD_ALL is served by BOTH cashiers
         queries.execute(
             """INSERT INTO "check" (check_number, id_employee, card_number, print_date, sum_total, vat)
-                           VALUES ('CH1', 'CASH1', 'CARD_ALL', '2026-06-16', 10, 2),
-                                  ('CH2', 'CASH2', 'CARD_ALL', '2026-06-16', 10, 2)"""
+               VALUES ('CH1', 'CASH1', 'CARD_ALL', '2026-06-16', 10, 2),
+                      ('CH2', 'CASH2', 'CARD_ALL', '2026-06-16', 10, 2),
+                      ('CH_EMP', 'EMP_TEST', 'CARD_ALL', '2026-06-16', 10, 2)"""
         )
 
-        # CARD_SOME is served ONLY by CASH1
         queries.execute(
             """INSERT INTO "check" (check_number, id_employee, card_number, print_date, sum_total, vat)
-                           VALUES ('CH3', 'CASH1', 'CARD_SOME', '2026-06-16', 10, 2)"""
+               VALUES ('CH3', 'CASH1', 'CARD_SOME', '2026-06-16', 10, 2)"""
         )
 
     def test_customer_served_by_all_included(self):
