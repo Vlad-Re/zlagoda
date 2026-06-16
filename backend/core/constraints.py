@@ -98,6 +98,8 @@ SQL_CONSTRAINTS = [
     FOREIGN KEY (check_number) REFERENCES "check"(check_number)
     ON UPDATE CASCADE ON DELETE CASCADE;
     """,
+    """ALTER TABLE store_product DROP CONSTRAINT IF EXISTS chk_sp_loop;""",
+    """ALTER TABLE store_product ADD CONSTRAINT chk_sp_loop CHECK ("UPC" != "UPC_prom");""",
 ]
 
 
