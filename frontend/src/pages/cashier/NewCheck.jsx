@@ -20,8 +20,20 @@ export default function NewCheck() {
 
   const addItem = () => setItems([...items, { UPC: '', product_number: 1 }]);
   const removeItem = (i) => setItems(items.filter((_, idx) => idx !== i));
-  const updateItem = (i, k, v) => setItems(items.map((it, idx) => idx === i ? { ...it, [k]: v } : it));
+  const updateItem = (i, k, v) => setItems(items.map((it, idx) => {
+    if (idx !== i) return it;
 
+    if (k === 'product_number') {
+      if (v === '') return { ...it, [k]: '' };
+
+      let val = parseInt(v, 10);
+      if (isNaN(val) || val < 1) val = 1;
+
+      return { ...it, [k]: val };
+    }
+
+    return { ...it, [k]: v };
+  }));
   const total = items.reduce((sum, it) => {
     const prod = getProdInfo(it.UPC);
     return sum + (prod ? Number(prod.selling_price) * Number(it.product_number || 0) : 0);
