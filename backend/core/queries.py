@@ -156,7 +156,6 @@ def get_top_cashiers_for_period(start_date, end_date):
     Визначити найприбутковіших касирів за період.
     Повертає лише тих, хто має більше 5 чеків. Сортування за виручкою.
     """
-    # Оптимізовано: замість вкладеного SELECT для COUNT, використано стандартний GROUP BY + HAVING
     query = """
             SELECT e.id_employee, e.empl_surname, e.empl_name,
                    COUNT(DISTINCT ch.check_number) AS checks_count,
@@ -168,7 +167,7 @@ def get_top_cashiers_for_period(start_date, end_date):
             WHERE ch.print_date >= %s AND ch.print_date <= %s
             GROUP BY e.id_employee, e.empl_surname, e.empl_name
             HAVING COUNT(DISTINCT ch.check_number) > 5
-            ORDER BY revenue DESC; \
+            ORDER BY revenue DESC;
             """
     return fetch_all(query, [start_date, end_date])
 
@@ -192,9 +191,9 @@ def get_categories_with_all_products_sold():
             """
     return fetch_all(query)
 
-
-def get_total_sold_per_category():
-    """Знайти загальну кількість проданих одиниць товарів для кожної категорії продукції."""
+# VladR query
+def get_total_sold_per_category(start_date, end_date):
+    """Знайти загальну кількість проданих одиниць товарів для кожної категорії продукції за вказаний період часу."""
     query = """
             SELECT c.category_name, SUM(s.product_number) AS total_sold
             FROM category c
@@ -202,13 +201,13 @@ def get_total_sold_per_category():
                      INNER JOIN store_product sp ON p.id_product = sp.id_product
                      INNER JOIN sale s ON sp."UPC" = s."UPC"
             GROUP BY c.category_name
-            ORDER BY total_sold DESC; \
+            ORDER BY total_sold DESC;
             """
     return fetch_all(query)
 
-
+# VladR query
 def get_employees_who_served_all_card_customers():
-    """Знайти працівників, які пробили хоча б один чек абсолютно кожному існуючому клієнту з карткою."""
+    """Знайти працівників, які пробили хоча б один чек абсолютно кожному існуючому клієнту з карткою лояльності."""
     query = """
             SELECT e.empl_surname, e.empl_name
             FROM employee e
@@ -221,7 +220,7 @@ def get_employees_who_served_all_card_customers():
                     WHERE ch.id_employee = e.id_employee
                       AND ch.card_number = c.card_number
                 )
-            ); \
+            );
             """
     return fetch_all(query)
 

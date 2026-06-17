@@ -884,7 +884,7 @@ def report_total_sold_per_product(request):
 @manager_required
 def report_customers_served_by_all_cashiers(request):
     return JsonResponse(
-        {"results": queries.get_customers_served_by_all_cashiers()}, safe=False
+        {"results": queries.get_customers_served_by_all_cashiers()}
     )
 
 
@@ -894,7 +894,7 @@ def report_top_cashiers(request):
     start = request.GET.get("start", "1970-01-01")
     end = request.GET.get("end", "2100-01-01")
     return JsonResponse(
-        {"results": queries.get_top_cashiers_for_period(start, end)}, safe=False
+        {"results": queries.get_top_cashiers_for_period(start, end)}
     )
 
 
@@ -902,21 +902,23 @@ def report_top_cashiers(request):
 @manager_required
 def report_categories_all_products_sold(request):
     return JsonResponse(
-        {"results": queries.get_categories_with_all_products_sold()}, safe=False
+        {"results": queries.get_categories_with_all_products_sold()}
     )
 
 
 @require_http_methods(["GET"])
 @manager_required
 def report_total_sold_per_category(request):
-    return JsonResponse({"results": queries.get_total_sold_per_category()}, safe=False)
+    return JsonResponse(
+        {"results": queries.get_total_sold_per_category()}
+    )
 
 
 @require_http_methods(["GET"])
 @manager_required
 def report_employees_served_all_customers(request):
     return JsonResponse(
-        {"results": queries.get_employees_who_served_all_card_customers()}, safe=False
+        {"results": queries.get_employees_who_served_all_card_customers()}
     )
 
 
