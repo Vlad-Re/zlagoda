@@ -66,7 +66,7 @@ export default function Layout() {
         <div className="sidebar-footer">
           <strong>{user?.name}</strong>
           <button
-            className="btn btn-ghost btn-sm"
+            className="btn btn-sm sidebar-logout"
             style={{ width: '100%', justifyContent: 'center', marginTop: '.5rem' }}
             onClick={handleLogout}
           >

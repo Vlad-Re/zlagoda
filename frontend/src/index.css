@@ -70,6 +70,12 @@ p { margin: 0 0 .5rem; }
 }
 .sidebar-footer strong { display: block; color: #fff; margin-bottom: .25rem; }
 
+.sidebar-logout {
+  background: rgba(139,92,246,.25); color: #fff;
+  border: 1px solid #a5b4fc;
+}
+.sidebar-logout:hover:not(:disabled) { background: rgba(139,92,246,.5); border-color: #c4b5fd; }
+
 .main-content { flex: 1; overflow: auto; }
 .page { padding: 1.5rem; }
 
