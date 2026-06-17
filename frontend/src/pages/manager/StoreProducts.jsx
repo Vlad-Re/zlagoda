@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getStoreProducts, createStoreProduct, updateStoreProduct, deleteStoreProduct, getStoreProduct } from '../../api/storeProducts';
+import { getStoreProducts, createStoreProduct, updateStoreProduct, deleteStoreProduct, getStoreProduct, receiveStoreProduct } from '../../api/storeProducts';
 import { getDropdown } from '../../api/dropdowns';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -22,6 +22,8 @@ export default function StoreProducts() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState('');
+  const [receipt, setReceipt] = useState(null); // { UPC, quantity, selling_price }
+  const [receiptError, setReceiptError] = useState('');
 
   const loadDropdowns = () => {
     getDropdown('products').then((r) => setProducts(r.results)).catch(() => {});
@@ -79,6 +81,33 @@ export default function StoreProducts() {
     finally { setSaving(false); }
   };
 
+  // Goods receipt (Надходження): top up an existing product with a new batch.
+  // If a new price is entered, the whole product is revalued to that price.
+  const openReceipt = (row) => {
+    setReceiptError('');
+    setReceipt({ UPC: row ? row.UPC : '', quantity: '', selling_price: row ? row.selling_price : '' });
+  };
+  const receiptProd = receipt && (rows.find((r) => r.UPC === receipt.UPC) || storeProds.find((s) => s.UPC === receipt.UPC));
+
+  const handleReceive = async () => {
+    if (!receipt.UPC) { setReceiptError('Оберіть товар'); return; }
+    if (receipt.quantity === '' || Number(receipt.quantity) <= 0) {
+      setReceiptError('Вкажіть кількість, що надійшла (більше нуля)'); return;
+    }
+    if (receipt.selling_price !== '' && Number(receipt.selling_price) < 0) {
+      setReceiptError('Ціна не може бути від\'ємною'); return;
+    }
+    setSaving(true); setReceiptError('');
+    try {
+      await receiveStoreProduct(receipt.UPC, {
+        quantity: Number(receipt.quantity),
+        selling_price: receipt.selling_price === '' ? null : Number(receipt.selling_price),
+      });
+      setReceipt(null); load(); loadDropdowns();
+    } catch (e) { setReceiptError(e.message); }
+    finally { setSaving(false); }
+  };
+
   const handleUpcSearch = async () => {
     if (!searchUpc.trim()) { setSearchResult(null); return; }
     try { const r = await getStoreProduct(searchUpc.trim()); setSearchResult(r); }
@@ -91,7 +120,10 @@ export default function StoreProducts() {
     <div className="page">
       <div className="page-header">
         <h1>Товари в магазині</h1>
-        <button className="btn btn-primary" onClick={openCreate}>+ Додати</button>
+        <div className="flex gap-sm">
+          <button className="btn btn-secondary" onClick={() => openReceipt(null)}>📦 Надходження</button>
+          <button className="btn btn-primary" onClick={openCreate}>+ Додати</button>
+        </div>
       </div>
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -171,6 +203,8 @@ export default function StoreProducts() {
                       : <span className="badge badge-gray">Звичайний</span>}
                   </td>
                   <td className="td-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => openReceipt(row)}>Надходження</button>
+                    {' '}
                     <button className="btn btn-ghost btn-sm" onClick={() => openEdit(row)}>Редагувати</button>
                     {' '}
                     <button className="btn btn-danger btn-sm" onClick={() => setDelTarget(row)}>Видалити</button>
@@ -220,6 +254,55 @@ export default function StoreProducts() {
               Акційний товар
             </label>
           </div>
+        </Modal>
+      )}
+
+      {receipt && (
+        <Modal title="Надходження товару" onClose={() => setReceipt(null)} onSubmit={handleReceive} loading={saving}>
+          {receiptError && <div className="alert alert-error">{receiptError}</div>}
+          <div className="form-group">
+            <label>Товар<span className="req"> *</span></label>
+            <select
+              value={receipt.UPC}
+              onChange={(e) => {
+                const sp = storeProds.find((s) => s.UPC === e.target.value);
+                setReceipt({ ...receipt, UPC: e.target.value, selling_price: sp ? sp.selling_price : '' });
+              }}
+            >
+              <option value="">— Оберіть товар —</option>
+              {storeProds.map((s) => (
+                <option key={s.UPC} value={s.UPC}>{s.product_name} [{s.UPC}]</option>
+              ))}
+            </select>
+          </div>
+          {receiptProd && (
+            <p className="text-muted" style={{ fontSize: '.85rem' }}>
+              Зараз на складі: <strong>{receiptProd.products_number}</strong> шт.
+              за ціною <strong>{Number(receiptProd.selling_price).toFixed(2)} грн</strong>
+            </p>
+          )}
+          <div className="form-row">
+            <div className="form-group">
+              <label>К-сть, що надійшла<span className="req"> *</span></label>
+              <input type="number" min="1" value={receipt.quantity}
+                onChange={(e) => setReceipt({ ...receipt, quantity: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Нова ціна продажу</label>
+              <input type="number" min="0" step="0.01" value={receipt.selling_price}
+                onChange={(e) => setReceipt({ ...receipt, selling_price: e.target.value })} />
+            </div>
+          </div>
+          {receiptProd && receipt.selling_price !== '' && Number(receipt.selling_price) !== Number(receiptProd.selling_price) && (
+            <div className="alert alert-warning" style={{ fontSize: '.85rem' }}>
+              Буде виконано переоцінку: усі {Number(receiptProd.products_number) + Number(receipt.quantity || 0)} шт.
+              (стара та нова партії) матимуть нову ціну {Number(receipt.selling_price || 0).toFixed(2)} грн.
+            </div>
+          )}
+          <small className="text-muted">
+            Кількість додається до наявної. Якщо вказати нову ціну продажу — увесь товар (стара і нова
+            партії) переоцінюється за новою ціною. Залиште ціну без змін, щоб лише поповнити запас.
+          </small>
         </Modal>
       )}
 

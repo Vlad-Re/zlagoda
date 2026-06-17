@@ -26,6 +26,7 @@ urlpatterns = [
 
     # Store products
     path("store-products/", views.store_product_list_create, name="store-products-list"),
+    path("store-products/<str:upc>/receipt/", views.store_product_receipt, name="store-product-receipt"),
     path("store-products/<str:upc>/", views.store_product_detail, name="store-product-detail"),
 
     # Checks

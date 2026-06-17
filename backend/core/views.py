@@ -679,6 +679,69 @@ def store_product_detail(request, upc):
             return JsonResponse({"error": str(e)}, status=400)
 
 
+@csrf_exempt
+@manager_required
+@require_http_methods(["POST"])
+def store_product_receipt(request, upc):
+    """Goods receipt (Надходження): a new batch of an existing store product
+    arrives. The supplied quantity is added to the stock. If a new selling price
+    is given, the WHOLE product is revalued — both the old and the new batch get
+    the new selling price (per the requirements)."""
+    data = json.loads(request.body)
+    try:
+        quantity = int(data.get("quantity"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Вкажіть коректну кількість"}, status=400)
+    if quantity <= 0:
+        return JsonResponse({"error": "Кількість має бути більшою за нуль"}, status=400)
+
+    new_price = data.get("selling_price")
+    if new_price is not None and new_price != "":
+        if float(new_price) < 0:
+            return JsonResponse({"error": "Ціна не може бути від'ємною"}, status=400)
+    else:
+        new_price = None
+
+    try:
+        with transaction.atomic():
+            row = queries.fetch_one(
+                'SELECT selling_price, products_number FROM store_product '
+                'WHERE "UPC" = %s FOR UPDATE',
+                [upc],
+            )
+            if not row:
+                return JsonResponse({"error": "Товар не знайдено"}, status=404)
+
+            if new_price is None:
+                # Same price — just top up the stock with the new batch.
+                queries.execute(
+                    'UPDATE store_product SET products_number = products_number + %s '
+                    'WHERE "UPC" = %s',
+                    [quantity, upc],
+                )
+                final_price = float(row["selling_price"])
+            else:
+                # New price — revalue all units (old + new batch) to the new price.
+                queries.execute(
+                    'UPDATE store_product '
+                    'SET products_number = products_number + %s, selling_price = %s '
+                    'WHERE "UPC" = %s',
+                    [quantity, new_price, upc],
+                )
+                final_price = float(new_price)
+
+            queries.apply_expiry_promotions()
+            new_total = row["products_number"] + quantity
+        return JsonResponse({
+            "message": "Надходження прийнято",
+            "products_number": new_total,
+            "selling_price": round(final_price, 2),
+            "revalued": new_price is not None,
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
 # ==========================================
 # 6. CHECK VIEWS
 # ==========================================

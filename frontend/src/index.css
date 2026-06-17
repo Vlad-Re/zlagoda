@@ -187,6 +187,7 @@ input:disabled, select:disabled { background: #f3f4f6; cursor: not-allowed; }
 .alert { padding: .75rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: .875rem; border-left: 3px solid; }
 .alert-error   { background: var(--danger-light); color: #991b1b; border-color: var(--danger); }
 .alert-success { background: var(--success-light); color: #14532d; border-color: var(--success); }
+.alert-warning { background: var(--warning-light); color: #92400e; border-color: var(--warning); }
 
 /* FILTERS */
 .filters { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem; }
