@@ -129,7 +129,7 @@ export default function StoreProducts() {
         </div>
       )}
 
-      {loading ? <div className="loading">Завантаження...</div> : (
+      {loading ? <div className="loading">Завантаження...</div> : !searchResult && (
         <div className="table-wrap">
           <table>
             <thead>

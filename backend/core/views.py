@@ -39,7 +39,7 @@ ON_SALE_SQL = (
 )
 
 EMP_SORT_COLS = ["empl_surname", "empl_name", "empl_role", "salary", "date_of_start"]
-CARD_SORT_COLS = ["cust_surname", "percent", "city"]
+CARD_SORT_COLS = ["card_number", "cust_surname", "cust_name", "percent", "city"]
 STORE_PROD_SORT_COLS = [
     "products_number",
     "selling_price",
@@ -329,6 +329,7 @@ def customer_card_list_create(request):
     if request.method == "GET":
         percent = request.GET.get("percent")
         sort = validate_sort_column(request.GET.get("sort"), CARD_SORT_COLS)
+        direction = "DESC" if request.GET.get("dir") == "desc" else "ASC"
         surname = request.GET.get("surname")
 
         query = "SELECT * FROM customer_card WHERE 1=1"
@@ -341,7 +342,7 @@ def customer_card_list_create(request):
             query += " AND cust_surname ILIKE %s"
             params.append(f"%{surname}%")
 
-        query += f" ORDER BY {sort}"
+        query += f" ORDER BY {sort} {direction}"
         cards = queries.fetch_all(query, params)
         return JsonResponse({"results": cards}, safe=False)
 
