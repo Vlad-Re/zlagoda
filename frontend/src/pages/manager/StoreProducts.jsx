@@ -4,7 +4,7 @@ import { getDropdown } from '../../api/dropdowns';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
-const EMPTY = { UPC: '', UPC_prom: '', id_product: '', selling_price: '', products_number: '', promotional_product: false };
+const EMPTY = { UPC: '', UPC_prom: '', id_product: '', selling_price: '', products_number: '', promotional_product: false, expire_date: '' };
 
 export default function StoreProducts() {
   const [rows, setRows] = useState([]);
@@ -14,6 +14,7 @@ export default function StoreProducts() {
   const [error, setError] = useState('');
   const [promoFilter, setPromoFilter] = useState('');
   const [sort, setSort] = useState('products_number');
+  const [dir, setDir] = useState('asc');
   const [searchUpc, setSearchUpc] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [modal, setModal] = useState(null);
@@ -29,7 +30,7 @@ export default function StoreProducts() {
 
   const load = () => {
     setLoading(true);
-    const params = { sort };
+    const params = { sort, dir };
     if (promoFilter !== '') params.promotional = promoFilter;
     getStoreProducts(params)
       .then((r) => setRows(r.results))
@@ -38,11 +39,19 @@ export default function StoreProducts() {
   };
 
   useEffect(() => { loadDropdowns(); }, []);
-  useEffect(load, [promoFilter, sort]);
+  useEffect(load, [promoFilter, sort, dir]);
+
+  // Clicking a column header sorts by it; clicking the active column flips direction.
+  const toggleSort = (col) => {
+    if (sort === col) setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSort(col); setDir('asc'); }
+  };
+  const sortArrow = (col) => (sort === col ? (dir === 'asc' ? ' ▲' : ' ▼') : '');
+  const thClass = (col) => 'sortable' + (sort === col ? ' sorted' : '');
 
   const openCreate = () => { setForm(EMPTY); setFormError(''); setModal({ mode: 'create' }); };
   const openEdit = (row) => {
-    setForm({ UPC: row.UPC, UPC_prom: row.UPC_prom || '', id_product: row.id_product, selling_price: row.selling_price, products_number: row.products_number, promotional_product: row.promotional_product });
+    setForm({ UPC: row.UPC, UPC_prom: row.UPC_prom || '', id_product: row.id_product, selling_price: row.selling_price, products_number: row.products_number, promotional_product: row.promotional_product, expire_date: row.expire_date || '' });
     setFormError(''); setModal({ mode: 'edit', id: row.UPC });
   };
 
@@ -96,14 +105,6 @@ export default function StoreProducts() {
           </select>
         </div>
         <div className="filter-group">
-          <label>Сортування</label>
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="products_number">К-сть</option>
-            <option value="selling_price">Ціна</option>
-            <option value="p.product_name">Назва</option>
-          </select>
-        </div>
-        <div className="filter-group">
           <label>Пошук за UPC</label>
           <div className="flex gap-sm">
             <input type="text" value={searchUpc} onChange={(e) => setSearchUpc(e.target.value)}
@@ -121,6 +122,7 @@ export default function StoreProducts() {
           <p><strong>Характеристики:</strong> {searchResult.characteristics}</p>
           <p><strong>Ціна:</strong> {Number(searchResult.selling_price).toFixed(2)} грн</p>
           <p><strong>К-сть на складі:</strong> {searchResult.products_number}</p>
+          <p><strong>Термін придатності:</strong> {searchResult.expire_date || '—'}</p>
           <p><strong>Акційний:</strong> {searchResult.promotional_product ? 'Так' : 'Ні'}</p>
         </div>
       )}
@@ -129,10 +131,19 @@ export default function StoreProducts() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>UPC</th><th>Назва</th><th>Категорія</th><th>Ціна</th><th>К-сть</th><th>Акція</th><th></th></tr>
+              <tr>
+                <th className={thClass('"UPC"')} onClick={() => toggleSort('"UPC"')}>UPC{sortArrow('"UPC"')}</th>
+                <th className={thClass('p.product_name')} onClick={() => toggleSort('p.product_name')}>Назва{sortArrow('p.product_name')}</th>
+                <th className={thClass('c.category_name')} onClick={() => toggleSort('c.category_name')}>Категорія{sortArrow('c.category_name')}</th>
+                <th className={thClass('selling_price')} onClick={() => toggleSort('selling_price')}>Ціна{sortArrow('selling_price')}</th>
+                <th className={thClass('products_number')} onClick={() => toggleSort('products_number')}>К-сть{sortArrow('products_number')}</th>
+                <th className={thClass('expire_date')} onClick={() => toggleSort('expire_date')}>Термін придатності{sortArrow('expire_date')}</th>
+                <th className={thClass('promotional_product')} onClick={() => toggleSort('promotional_product')}>Акція{sortArrow('promotional_product')}</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={7}><div className="empty-state"><p>Немає товарів</p></div></td></tr>}
+              {rows.length === 0 && <tr><td colSpan={8}><div className="empty-state"><p>Немає товарів</p></div></td></tr>}
               {rows.map((row) => (
                 <tr key={row.UPC}>
                   <td><span className="text-muted">{row.UPC}</span></td>
@@ -140,6 +151,7 @@ export default function StoreProducts() {
                   <td>{row.category_name}</td>
                   <td className="nowrap">{Number(row.selling_price).toFixed(2)} грн</td>
                   <td className={row.products_number === 0 ? 'badge-red' : ''}>{row.products_number}</td>
+                  <td className="nowrap">{row.expire_date || '—'}</td>
                   <td>
                     {row.promotional_product
                       ? <span className="badge badge-green">Акція</span>
@@ -174,6 +186,11 @@ export default function StoreProducts() {
           <div className="form-row">
             <div className="form-group"><label>Ціна<span className="req"> *</span></label><input type="number" min="0" step="0.01" value={form.selling_price} onChange={f('selling_price')} /></div>
             <div className="form-group"><label>К-сть<span className="req"> *</span></label><input type="number" min="0" value={form.products_number} onChange={f('products_number')} /></div>
+          </div>
+          <div className="form-group">
+            <label>Термін придатності</label>
+            <input type="date" value={form.expire_date} onChange={f('expire_date')} />
+            <small className="text-muted">Товар автоматично стає акційним, якщо до кінця терміну ≤ 3 дні та на складі більше 10 одиниць.</small>
           </div>
           <div className="form-group">
             <label>UPC базового товару (для акційних)</label>

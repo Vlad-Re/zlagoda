@@ -81,6 +81,24 @@ def get_all_products_with_categories():
     return fetch_all(query)
 
 
+def apply_expiry_promotions():
+    """Business rule: a store product automatically goes on sale when it is
+    close to expiring (within 3 days) and there is plenty of stock left
+    (more than 10 units). The flag is only switched on — products that were
+    set promotional by other means are left untouched."""
+    execute(
+        """
+        UPDATE store_product
+        SET promotional_product = TRUE
+        WHERE promotional_product = FALSE
+          AND expire_date IS NOT NULL
+          AND expire_date >= CURRENT_DATE
+          AND expire_date <= CURRENT_DATE + INTERVAL '3 days'
+          AND products_number > 10
+        """
+    )
+
+
 def get_promotional_products():
     query = """
             SELECT sp."UPC", sp.selling_price, sp.products_number, p.product_name

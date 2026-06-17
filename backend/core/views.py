@@ -27,7 +27,15 @@ def validate_sort_column(sort_column, allowed_columns):
 
 EMP_SORT_COLS = ["empl_surname", "empl_name", "empl_role", "salary", "date_of_start"]
 CARD_SORT_COLS = ["cust_surname", "percent", "city"]
-STORE_PROD_SORT_COLS = ["products_number", "selling_price", '"UPC"', "p.product_name"]
+STORE_PROD_SORT_COLS = [
+    "products_number",
+    "selling_price",
+    '"UPC"',
+    "p.product_name",
+    "c.category_name",
+    "expire_date",
+    "promotional_product",
+]
 
 
 # ==========================================
@@ -485,8 +493,13 @@ def product_detail(request, id_product):
 @require_http_methods(["GET", "POST"])
 def store_product_list_create(request):
     if request.method == "GET":
+        # Keep the auto-promotion rule up to date before reading the list,
+        # so products that have entered the 3-day expiry window show as on sale.
+        queries.apply_expiry_promotions()
+
         promotional = request.GET.get("promotional")
         sort = validate_sort_column(request.GET.get("sort"), STORE_PROD_SORT_COLS)
+        direction = "DESC" if request.GET.get("dir") == "desc" else "ASC"
         search = request.GET.get("search")
 
         query = """SELECT sp.*, p.product_name, p.characteristics, c.category_name
@@ -504,7 +517,7 @@ def store_product_list_create(request):
             query += " AND p.product_name ILIKE %s"
             params.append(f"%{search}%")
 
-        query += f" ORDER BY {sort}"
+        query += f" ORDER BY {sort} {direction}"
         products = queries.fetch_all(query, params)
         return JsonResponse({"results": products}, safe=False)
 
@@ -514,8 +527,8 @@ def store_product_list_create(request):
     data = json.loads(request.body)
     try:
         queries.execute(
-            """INSERT INTO store_product ("UPC", "UPC_prom", id_product, selling_price, products_number, promotional_product)
-               VALUES (%s, %s, %s, %s, %s, %s)""",
+            """INSERT INTO store_product ("UPC", "UPC_prom", id_product, selling_price, products_number, promotional_product, expire_date)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             [
                 data["UPC"],
                 data.get("UPC_prom"),
@@ -523,8 +536,10 @@ def store_product_list_create(request):
                 data["selling_price"],
                 data["products_number"],
                 data["promotional_product"],
+                data.get("expire_date") or None,
             ],
         )
+        queries.apply_expiry_promotions()
         return JsonResponse({"message": "Товар додано до магазину"}, status=201)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -556,7 +571,7 @@ def store_product_detail(request, upc):
             queries.execute(
                 """UPDATE store_product
                    SET "UPC_prom" = %s, id_product = %s, selling_price = %s,
-                       products_number = %s, promotional_product = %s
+                       products_number = %s, promotional_product = %s, expire_date = %s
                    WHERE "UPC" = %s""",
                 [
                     data.get("UPC_prom"),
@@ -564,9 +579,11 @@ def store_product_detail(request, upc):
                     data.get("selling_price"),
                     data.get("products_number"),
                     data.get("promotional_product"),
+                    data.get("expire_date") or None,
                     upc,
                 ],
             )
+            queries.apply_expiry_promotions()
             return JsonResponse({"message": "Дані товару в магазині оновлено"})
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
