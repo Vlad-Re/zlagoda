@@ -60,6 +60,7 @@ class StoreProduct(models.Model):
     selling_price = models.DecimalField(max_digits=13, decimal_places=4)
     products_number = models.IntegerField()
     promotional_product = models.BooleanField()
+    expire_date = models.DateField(null=True, blank=True)
 
     class Meta:
         db_table = "store_product"
