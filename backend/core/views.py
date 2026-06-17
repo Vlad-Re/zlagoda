@@ -909,8 +909,10 @@ def report_categories_all_products_sold(request):
 @require_http_methods(["GET"])
 @manager_required
 def report_total_sold_per_category(request):
+    start = request.GET.get("start", "1970-01-01")
+    end = request.GET.get("end", "2100-01-01")
     return JsonResponse(
-        {"results": queries.get_total_sold_per_category()}
+        {"results": queries.get_total_sold_per_category(start, end)}
     )
 
 

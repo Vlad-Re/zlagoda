@@ -12,6 +12,7 @@ const tabs = [
   { id: 'checks',    label: 'Чеки за період' },
   { id: 'revenue',   label: 'Виручка' },
   { id: 'sold',      label: 'Продані товари' },
+  { id: 'sold_cats', label: 'Продані категорії' },
   { id: 'promo',     label: 'Акційні/неакційні' },
   { id: 'cashiers',  label: 'Топ-касири' },
   { id: 'advanced',  label: 'Розширені' },
@@ -73,6 +74,9 @@ export default function Reports() {
       } else if (tab === 'sold') {
         const r = await getTotalSoldPerProduct(p);
         setData(r.results);
+      } else if (tab === 'sold_cats') {
+          const r = await getTotalSoldPerCategory(p);
+          setData(r.results);
       } else if (tab === 'cashiers') {
         const r = await getTopCashiers(p);
         setData(r.results);
@@ -140,6 +144,27 @@ export default function Reports() {
           </tbody>
         </table>
       );
+    }
+    if (tab === 'sold_cats') {
+        return (
+            <table>
+                <thead>
+                <tr>
+                    <th>Категорія</th>
+                    <th>Продано (шт.)</th>
+                </tr>
+                </thead>
+                <tbody>
+                {data.map((r, i) => (
+                    <tr key={i}>
+                        <td>{r.category_name}</td>
+                        <td>{r.total_sold}</td>
+                    </tr>
+                ))}
+                {data.length === 0 && <tr><td colSpan={2} className="text-center">Немає даних</td></tr>}
+                </tbody>
+            </table>
+        );
     }
     if (tab === 'cashiers') {
       return (

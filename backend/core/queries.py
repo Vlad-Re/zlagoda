@@ -126,7 +126,7 @@ def get_total_sold_per_product():
                      INNER JOIN store_product sp ON p.id_product = sp.id_product
                      INNER JOIN sale s ON sp."UPC" = s."UPC"
             GROUP BY p.product_name
-            ORDER BY total_sold DESC; \
+            ORDER BY total_sold DESC;
             """
     return fetch_all(query)
 
@@ -200,10 +200,12 @@ def get_total_sold_per_category(start_date, end_date):
                      INNER JOIN product p ON c.category_number = p.category_number
                      INNER JOIN store_product sp ON p.id_product = sp.id_product
                      INNER JOIN sale s ON sp."UPC" = s."UPC"
+                     INNER JOIN "check" ch ON s.check_number = ch.check_number
+            WHERE ch.print_date >= %s AND ch.print_date <= %s
             GROUP BY c.category_name
             ORDER BY total_sold DESC;
             """
-    return fetch_all(query)
+    return fetch_all(query, [start_date, end_date])
 
 # VladR query
 def get_employees_who_served_all_card_customers():
