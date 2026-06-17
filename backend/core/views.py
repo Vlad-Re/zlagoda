@@ -330,6 +330,16 @@ def customer_card_list_create(request):
         return JsonResponse({"results": cards}, safe=False)
 
     data = json.loads(request.body)
+
+    percent = data.get("percent")
+    if percent is not None:
+        try:
+            percent_val = int(percent)
+            if percent_val < 0 or percent_val > 100:
+                return JsonResponse({"error": "Відсоток знижки має бути від 0 до 100."}, status=400)
+        except ValueError:
+            return JsonResponse({"error": "Відсоток знижки має бути числом."}, status=400)
+
     try:
         queries.execute(
             """INSERT INTO customer_card
@@ -349,6 +359,8 @@ def customer_card_list_create(request):
             ],
         )
         return JsonResponse({"message": "Картку клієнта створено"}, status=201)
+    except IntegrityError:
+        return JsonResponse({"error": "Помилка збереження. Перевірте унікальність номера картки або інші обмеження."}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -365,6 +377,14 @@ def customer_card_detail(request, card_number):
 
     elif request.method == "PUT":
         data = json.loads(request.body)
+        percent = data.get("percent")
+        if percent is not None:
+            try:
+                percent_val = int(percent)
+                if percent_val < 0 or percent_val > 100:
+                    return JsonResponse({"error": "Відсоток знижки має бути від 0 до 100."}, status=400)
+            except ValueError:
+                return JsonResponse({"error": "Відсоток знижки має бути числом."}, status=400)
         try:
             queries.execute(
                 """UPDATE customer_card
@@ -384,6 +404,8 @@ def customer_card_detail(request, card_number):
                 ],
             )
             return JsonResponse({"message": "Картку клієнта оновлено"})
+        except IntegrityError:
+            return JsonResponse({"error": "Помилка оновлення бази даних. Перевірте введені значення."}, status=400)
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
