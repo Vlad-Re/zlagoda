@@ -1,4 +1,13 @@
+import { useEffect } from 'react';
+
 export default function Modal({ title, onClose, onSubmit, children, wide, submitLabel = 'Зберегти', loading }) {
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, []);
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' modal-wide' : ''}`}>
