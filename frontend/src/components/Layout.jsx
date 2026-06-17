@@ -35,6 +35,7 @@ export default function Layout() {
     { to: '/manager/customer-cards',  label: 'Картки клієнтів' },
     { to: '/manager/checks',          label: 'Чеки' },
     { to: '/manager/reports',         label: 'Звіти' },
+    { to: '/cashier/profile',         label: 'Мій профіль' },
   ];
 
   const cashierLinks = [
