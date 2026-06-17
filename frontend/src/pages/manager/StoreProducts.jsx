@@ -120,7 +120,9 @@ export default function StoreProducts() {
           <h3>Результат пошуку за UPC: {searchResult.UPC}</h3>
           <p><strong>Назва:</strong> {searchResult.product_name}</p>
           <p><strong>Характеристики:</strong> {searchResult.characteristics}</p>
-          <p><strong>Ціна:</strong> {Number(searchResult.selling_price).toFixed(2)} грн</p>
+          <p><strong>Ціна:</strong> {Number(searchResult.selling_price).toFixed(2)} грн
+            {searchResult.on_sale && <> → <strong>{(Number(searchResult.selling_price) * 0.8).toFixed(2)} грн (Акція −20%)</strong></>}
+          </p>
           <p><strong>К-сть на складі:</strong> {searchResult.products_number}</p>
           <p><strong>Термін придатності:</strong> {searchResult.expire_date || '—'}</p>
           <p><strong>Акційний:</strong> {searchResult.promotional_product ? 'Так' : 'Ні'}</p>
@@ -149,12 +151,23 @@ export default function StoreProducts() {
                   <td><span className="text-muted">{row.UPC}</span></td>
                   <td>{row.product_name}</td>
                   <td>{row.category_name}</td>
-                  <td className="nowrap">{Number(row.selling_price).toFixed(2)} грн</td>
+                  <td className="nowrap">
+                    {row.on_sale ? (
+                      <>
+                        <span className="text-muted" style={{ textDecoration: 'line-through' }}>
+                          {Number(row.selling_price).toFixed(2)}
+                        </span>{' '}
+                        <strong>{(Number(row.selling_price) * 0.8).toFixed(2)} грн</strong>
+                      </>
+                    ) : (
+                      `${Number(row.selling_price).toFixed(2)} грн`
+                    )}
+                  </td>
                   <td className={row.products_number === 0 ? 'badge-red' : ''}>{row.products_number}</td>
                   <td className="nowrap">{row.expire_date || '—'}</td>
                   <td>
                     {row.promotional_product
-                      ? <span className="badge badge-green">Акція</span>
+                      ? <span className="badge badge-green">{row.on_sale ? 'Акція −20%' : 'Акція'}</span>
                       : <span className="badge badge-gray">Звичайний</span>}
                   </td>
                   <td className="td-actions">

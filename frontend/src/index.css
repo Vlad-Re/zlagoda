@@ -237,6 +237,24 @@ input:disabled, select:disabled { background: #f3f4f6; cursor: not-allowed; }
 .check-total { background: var(--accent-light); border-radius: var(--radius-sm); padding: .75rem 1rem; margin-top: 1rem; }
 .check-total strong { color: var(--accent); font-size: 1.1rem; }
 
+/* Typeable product combobox (new check) */
+.combo { position: relative; }
+.check-item-row .combo input { width: 100%; }
+.combo-list {
+  position: absolute; z-index: 30; top: calc(100% + 2px); left: 0; right: 0;
+  max-height: 280px; overflow-y: auto;
+  margin: 0; padding: 4px; list-style: none;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+}
+.combo-item {
+  padding: .45rem .6rem; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: .875rem; color: var(--text-h);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.combo-item:hover { background: var(--accent-light); }
+.combo-item small { color: var(--text-muted); }
+
 /* PRINT */
 @media print {
   .sidebar, .page-header .btn, .page-toolbar,

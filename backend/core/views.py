@@ -25,6 +25,19 @@ def validate_sort_column(sort_column, allowed_columns):
     return sort_column
 
 
+# Products that go on sale because they are about to expire are sold at this
+# discount off their listed price (20% off => customer pays 80%).
+EXPIRY_SALE_DISCOUNT = 0.20
+
+# SQL boolean that is TRUE when a store_product currently qualifies for the
+# expiry sale (close to expiry + plenty of stock). Mirrors apply_expiry_promotions.
+ON_SALE_SQL = (
+    "(expire_date IS NOT NULL "
+    "AND expire_date >= CURRENT_DATE "
+    "AND expire_date <= CURRENT_DATE + INTERVAL '3 days' "
+    "AND products_number > 10)"
+)
+
 EMP_SORT_COLS = ["empl_surname", "empl_name", "empl_role", "salary", "date_of_start"]
 CARD_SORT_COLS = ["cust_surname", "percent", "city"]
 STORE_PROD_SORT_COLS = [
@@ -502,11 +515,17 @@ def store_product_list_create(request):
         direction = "DESC" if request.GET.get("dir") == "desc" else "ASC"
         search = request.GET.get("search")
 
-        query = """SELECT sp.*, p.product_name, p.characteristics, c.category_name
+        query = (
+            "SELECT sp.*, p.product_name, p.characteristics, c.category_name, "
+            + ON_SALE_SQL.replace("expire_date", "sp.expire_date").replace(
+                "products_number", "sp.products_number"
+            )
+            + """ AS on_sale
                    FROM store_product sp
                    JOIN product p ON sp.id_product = p.id_product
                    JOIN category c ON p.category_number = c.category_number
                    WHERE 1=1"""
+        )
         params = []
 
         if promotional == "true":
@@ -551,7 +570,11 @@ def store_product_list_create(request):
 def store_product_detail(request, upc):
     if request.method == "GET":
         product = queries.fetch_one(
-            """SELECT sp.*, p.product_name, p.characteristics, c.category_name
+            "SELECT sp.*, p.product_name, p.characteristics, c.category_name, "
+            + ON_SALE_SQL.replace("expire_date", "sp.expire_date").replace(
+                "products_number", "sp.products_number"
+            )
+            + """ AS on_sale
                FROM store_product sp
                JOIN product p ON sp.id_product = p.id_product
                JOIN category c ON p.category_number = c.category_number
@@ -664,12 +687,26 @@ def check_list_create(request):
 
     try:
         with transaction.atomic():
-            sum_total = 0
+            # If a loyalty card is supplied, its discount percent applies to the
+            # whole check subtotal (this is what actually makes "sales" work).
+            card_percent = 0
+            if card_number:
+                card = queries.fetch_one(
+                    "SELECT percent FROM customer_card WHERE card_number = %s",
+                    [card_number],
+                )
+                if not card:
+                    raise Exception("Картку клієнта не знайдено.")
+                card_percent = int(card["percent"])
+
+            subtotal = 0
             processed_products = []
 
             for product in products:
                 actual_product = queries.fetch_one(
-                    'SELECT selling_price, products_number FROM store_product WHERE "UPC" = %s FOR UPDATE',
+                    'SELECT selling_price, products_number, '
+                    + ON_SALE_SQL
+                    + ' AS on_sale FROM store_product WHERE "UPC" = %s FOR UPDATE',
                     [product["UPC"]],
                 )
                 if not actual_product:
@@ -682,14 +719,22 @@ def check_list_create(request):
                         f"(є {actual_product['products_number']}, потрібно {qty})."
                     )
 
-                real_price = float(actual_product["selling_price"])
-                sum_total += qty * real_price
+                # Expiry sale: on-sale products are charged 20% off the list price.
+                list_price = float(actual_product["selling_price"])
+                real_price = (
+                    round(list_price * (1 - EXPIRY_SALE_DISCOUNT), 2)
+                    if actual_product["on_sale"]
+                    else list_price
+                )
+                subtotal += qty * real_price
                 processed_products.append({
                     "UPC": product["UPC"],
                     "product_number": qty,
                     "selling_price": real_price,
                 })
 
+            discount_amount = round(subtotal * card_percent / 100.0, 2)
+            sum_total = subtotal - discount_amount
             vat = sum_total * 0.2
 
             queries.execute(
@@ -710,7 +755,15 @@ def check_list_create(request):
                 )
 
         return JsonResponse(
-            {"message": "Чек успішно створено", "check_number": check_number},
+            {
+                "message": "Чек успішно створено",
+                "check_number": check_number,
+                "subtotal": round(subtotal, 2),
+                "card_percent": card_percent,
+                "discount_amount": discount_amount,
+                "sum_total": round(sum_total, 2),
+                "vat": round(vat, 2),
+            },
             status=201,
         )
     except IntegrityError:
@@ -967,13 +1020,20 @@ def ui_dropdowns(request, entity):
             "FROM product ORDER BY product_name"
         ),
         "customer-cards": (
-            "SELECT card_number as id, CONCAT(cust_surname, ' ', cust_name) as name "
+            "SELECT card_number as id, "
+            "CONCAT(cust_surname, ' ', cust_name, ' (-', percent, '%%)') as name, percent "
             "FROM customer_card ORDER BY cust_surname"
         ),
         "store-products": (
             """SELECT sp."UPC" as id,
                       CONCAT(p.product_name, ' [', sp."UPC", '] — ', sp.selling_price, ' грн') as name,
-                      sp.selling_price, sp.products_number, p.product_name
+                      sp.selling_price, sp.products_number, p.product_name,
+                      sp.promotional_product,
+                      """
+            + ON_SALE_SQL.replace("expire_date", "sp.expire_date").replace(
+                "products_number", "sp.products_number"
+            )
+            + """ AS on_sale
                FROM store_product sp
                JOIN product p ON sp.id_product = p.id_product
                WHERE sp.products_number > 0

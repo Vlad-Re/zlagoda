@@ -2,6 +2,59 @@ import { useState, useEffect } from 'react';
 import { getDropdown } from '../../api/dropdowns';
 import { createCheck } from '../../api/checks';
 
+// Typeable product picker: filter by UPC or name, pick from a styled list,
+// or type/scan a full UPC to select it directly.
+function ProductPicker({ products, value, onChange }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const selected = products.find((p) => p.id === value);
+
+  const q = query.trim().toLowerCase();
+  const filtered = products
+    .filter((p) =>
+      !q ||
+      p.id.toLowerCase().includes(q) ||
+      p.product_name.toLowerCase().includes(q),
+    )
+    .slice(0, 50);
+
+  const handleType = (v) => {
+    setQuery(v);
+    setOpen(true);
+    const exact = products.find((p) => p.id === v.trim());
+    onChange(exact ? exact.id : '');
+  };
+
+  const pick = (p) => {
+    onChange(p.id);
+    setQuery('');
+    setOpen(false);
+  };
+
+  const display = open ? query : (selected ? `${selected.product_name} [${selected.id}]` : query);
+
+  return (
+    <div className="combo" style={{ flex: '1 1 250px' }}>
+      <input
+        value={display}
+        onChange={(e) => handleType(e.target.value)}
+        onFocus={() => { setQuery(''); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Введіть UPC або назву товару"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="combo-list">
+          {filtered.map((p) => (
+            <li key={p.id} className="combo-item" onMouseDown={() => pick(p)}>
+              {p.product_name} <small>[{p.id}] · {Number(p.selling_price).toFixed(2)} грн</small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function NewCheck() {
   const [storeProds, setStoreProds] = useState([]);
   const [cards, setCards] = useState([]);
@@ -17,6 +70,10 @@ export default function NewCheck() {
   }, []);
 
   const getProdInfo = (upc) => storeProds.find((p) => p.id === upc);
+  // On-sale (near-expiry) products are charged 20% off their list price.
+  const EXPIRY_SALE_DISCOUNT = 0.2;
+  const unitPrice = (prod) =>
+    Number(prod.selling_price) * (prod.on_sale ? 1 - EXPIRY_SALE_DISCOUNT : 1);
 
   const addItem = () => setItems([...items, { UPC: '', product_number: 1 }]);
   const removeItem = (i) => setItems(items.filter((_, idx) => idx !== i));
@@ -34,12 +91,21 @@ export default function NewCheck() {
 
     return { ...it, [k]: v };
   }));
-  const total = items.reduce((sum, it) => {
-    const prod = getProdInfo(it.UPC);
-    return sum + (prod ? Number(prod.selling_price) * Number(it.product_number || 0) : 0);
-  }, 0);
+  const selectedCard = cards.find((c) => c.id === cardNumber);
+  const cardPercent = selectedCard ? Number(selectedCard.percent) || 0 : 0;
 
+  const subtotal = items.reduce((sum, it) => {
+    const prod = getProdInfo(it.UPC);
+    return sum + (prod ? unitPrice(prod) * Number(it.product_number || 0) : 0);
+  }, 0);
+  const discount = subtotal * cardPercent / 100;
+  const total = subtotal - discount;
   const vat = total * 0.2;
+
+  // Items on the expiry sale (20% off) — collected to explain the discount on the UI.
+  const saleItems = items
+    .map((it) => getProdInfo(it.UPC))
+    .filter((p) => p && p.on_sale);
 
   const handleSubmit = async () => {
     setError(''); setSuccess('');
@@ -49,7 +115,11 @@ export default function NewCheck() {
     }
     for (const it of validItems) {
       const prod = getProdInfo(it.UPC);
-      if (prod && Number(it.product_number) > prod.products_number) {
+      if (!prod) {
+        setError(`Товар з UPC "${it.UPC}" не знайдено`);
+        return;
+      }
+      if (Number(it.product_number) > prod.products_number) {
         setError(`Недостатньо товару "${prod.product_name}" (є ${prod.products_number} шт.)`);
         return;
       }
@@ -60,7 +130,10 @@ export default function NewCheck() {
         card_number: cardNumber || null,
         products: validItems.map((it) => ({ UPC: it.UPC, product_number: Number(it.product_number) })),
       });
-      setSuccess(`Чек №${r.check_number} успішно створено!`);
+      const discountNote = r.card_percent > 0
+        ? ` Застосовано знижку ${r.card_percent}% (−${Number(r.discount_amount).toFixed(2)} грн).`
+        : '';
+      setSuccess(`Чек №${r.check_number} успішно створено! До сплати: ${Number(r.sum_total).toFixed(2)} грн.${discountNote}`);
       setItems([{ UPC: '', product_number: 1 }]);
       setCardNumber('');
       getDropdown('store-products').then((r) => setStoreProds(r.results)).catch(() => {});
@@ -90,21 +163,32 @@ export default function NewCheck() {
           const prod = getProdInfo(item.UPC);
           return (
             <div key={i} className="check-item-row">
-              <select value={item.UPC} onChange={(e) => updateItem(i, 'UPC', e.target.value)} style={{ flex: '1 1 250px' }}>
-                <option value="">— Оберіть товар —</option>
-                {storeProds.map((p) => (
-                  <option key={p.id} value={p.id} disabled={p.products_number === 0}>
-                    {p.name} {p.products_number === 0 ? '(немає)' : ''}
-                  </option>
-                ))}
-              </select>
+              <ProductPicker
+                products={storeProds}
+                value={item.UPC}
+                onChange={(upc) => updateItem(i, 'UPC', upc)}
+              />
               <input
                 type="number" min="1" value={item.product_number}
                 max={prod?.products_number || 9999}
                 onChange={(e) => updateItem(i, 'product_number', e.target.value)}
                 style={{ width: 80 }}
               />
-              {prod && <span className="text-muted nowrap">{Number(prod.selling_price).toFixed(2)} грн/шт.</span>}
+              {prod && <span className="nowrap"><strong>{prod.product_name}</strong></span>}
+              {item.UPC && !prod && <span className="nowrap" style={{ color: 'var(--danger)' }}>Товар не знайдено</span>}
+              {prod && (
+                prod.on_sale ? (
+                  <span className="nowrap">
+                    <span className="text-muted" style={{ textDecoration: 'line-through' }}>
+                      {Number(prod.selling_price).toFixed(2)}
+                    </span>{' '}
+                    <strong>{unitPrice(prod).toFixed(2)} грн/шт.</strong>
+                  </span>
+                ) : (
+                  <span className="text-muted nowrap">{Number(prod.selling_price).toFixed(2)} грн/шт.</span>
+                )
+              )}
+              {prod?.on_sale && <span className="badge badge-green">Акція −20%</span>}
               {items.length > 1 && (
                 <button className="btn btn-danger btn-sm" onClick={() => removeItem(i)}>✕</button>
               )}
@@ -117,7 +201,22 @@ export default function NewCheck() {
         </button>
 
         <div className="check-total" style={{ marginTop: '1rem' }}>
-          <div>До сплати: <strong>{total.toFixed(2)} грн</strong></div>
+          <div className="text-muted" style={{ fontSize: '.9rem' }}>Проміжна сума: {subtotal.toFixed(2)} грн</div>
+          {saleItems.length > 0 && (
+            <div style={{ fontSize: '.85rem', color: 'var(--success)' }}>
+              Акція за терміном придатності −20% застосована до товарів: {saleItems.map((p) => p.product_name).join(', ')}
+            </div>
+          )}
+          {cardPercent > 0 ? (
+            <div style={{ fontSize: '.9rem', color: 'var(--success)' }}>
+              Знижка за карткою «{selectedCard?.name}»: −{discount.toFixed(2)} грн ({cardPercent}%)
+            </div>
+          ) : cardNumber ? (
+            <div className="text-muted" style={{ fontSize: '.85rem' }}>Картка без знижки (0%)</div>
+          ) : (
+            <div className="text-muted" style={{ fontSize: '.85rem' }}>Без картки — знижка не застосовується</div>
+          )}
+          <div style={{ marginTop: '.35rem' }}>До сплати: <strong>{total.toFixed(2)} грн</strong></div>
           <div className="text-muted" style={{ fontSize: '.85rem' }}>ПДВ (20%): {vat.toFixed(2)} грн</div>
         </div>
 
