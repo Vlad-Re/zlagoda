@@ -59,9 +59,9 @@ export default function Layout() {
         {user?.role === 'Cashier' && (
           <NavSection label="Касир" links={cashierLinks} />
         )}
-        {user?.role === 'Manager' && (
-          <NavSection label="Каса" links={cashierLinks} />
-        )}
+        {/*{user?.role === 'Manager' && (*/}
+        {/*  <NavSection label="Каса" links={cashierLinks} />*/}
+        {/*)}*/}
 
         <div className="sidebar-footer">
           <strong>{user?.name}</strong>

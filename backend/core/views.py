@@ -73,11 +73,13 @@ def login_view(request):
     request.session["employee_id"] = employee["id_employee"]
     request.session["role"] = employee["empl_role"]
 
-    return JsonResponse({
-        "id_employee": employee["id_employee"],
-        "role": employee["empl_role"],
-        "name": f"{employee['empl_surname']} {employee['empl_name']}",
-    })
+    return JsonResponse(
+        {
+            "id_employee": employee["id_employee"],
+            "role": employee["empl_role"],
+            "name": f"{employee['empl_surname']} {employee['empl_name']}",
+        }
+    )
 
 
 @csrf_exempt
@@ -192,6 +194,13 @@ def employee_list_create(request):
         return JsonResponse({"results": employees}, safe=False)
 
     data = json.loads(request.body)
+
+    date_error = validate_employee_dates(
+        data.get("date_of_birth"), data.get("date_of_start")
+    )
+    if date_error:
+        return JsonResponse({"error": date_error}, status=400)
+
     raw_password = data.get("password") or data["id_employee"]
     try:
         queries.execute(
@@ -241,6 +250,13 @@ def employee_detail(request, id_employee):
 
     elif request.method == "PUT":
         data = json.loads(request.body)
+
+        date_error = validate_employee_dates(
+            data.get("date_of_birth"), data.get("date_of_start")
+        )
+        if date_error:
+            return JsonResponse({"error": date_error}, status=400)
+
         try:
             extra_set = ""
             extra_params = []
@@ -336,9 +352,13 @@ def customer_card_list_create(request):
         try:
             percent_val = int(percent)
             if percent_val < 0 or percent_val > 100:
-                return JsonResponse({"error": "Відсоток знижки має бути від 0 до 100."}, status=400)
+                return JsonResponse(
+                    {"error": "Відсоток знижки має бути від 0 до 100."}, status=400
+                )
         except ValueError:
-            return JsonResponse({"error": "Відсоток знижки має бути числом."}, status=400)
+            return JsonResponse(
+                {"error": "Відсоток знижки має бути числом."}, status=400
+            )
 
     try:
         queries.execute(
@@ -360,7 +380,12 @@ def customer_card_list_create(request):
         )
         return JsonResponse({"message": "Картку клієнта створено"}, status=201)
     except IntegrityError:
-        return JsonResponse({"error": "Помилка збереження. Перевірте унікальність номера картки або інші обмеження."}, status=400)
+        return JsonResponse(
+            {
+                "error": "Помилка збереження. Перевірте унікальність номера картки або інші обмеження."
+            },
+            status=400,
+        )
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -382,9 +407,13 @@ def customer_card_detail(request, card_number):
             try:
                 percent_val = int(percent)
                 if percent_val < 0 or percent_val > 100:
-                    return JsonResponse({"error": "Відсоток знижки має бути від 0 до 100."}, status=400)
+                    return JsonResponse(
+                        {"error": "Відсоток знижки має бути від 0 до 100."}, status=400
+                    )
             except ValueError:
-                return JsonResponse({"error": "Відсоток знижки має бути числом."}, status=400)
+                return JsonResponse(
+                    {"error": "Відсоток знижки має бути числом."}, status=400
+                )
         try:
             queries.execute(
                 """UPDATE customer_card
@@ -405,7 +434,10 @@ def customer_card_detail(request, card_number):
             )
             return JsonResponse({"message": "Картку клієнта оновлено"})
         except IntegrityError:
-            return JsonResponse({"error": "Помилка оновлення бази даних. Перевірте введені значення."}, status=400)
+            return JsonResponse(
+                {"error": "Помилка оновлення бази даних. Перевірте введені значення."},
+                status=400,
+            )
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
 
@@ -689,7 +721,14 @@ def check_list_create(request):
         return JsonResponse({"results": checks}, safe=False)
 
     # POST — create check
+    if request.session.get("role") != "Cashier":
+        return JsonResponse(
+            {"error": "Здійснювати продаж товарів (створювати чеки) може лише Касир."},
+            status=403,
+        )
+
     data = json.loads(request.body)
+    id_employee = request.session.get("employee_id")  # Тепер це 100% касир
 
     role = request.session.get("role")
     session_emp = request.session.get("employee_id")
@@ -726,7 +765,7 @@ def check_list_create(request):
 
             for product in products:
                 actual_product = queries.fetch_one(
-                    'SELECT selling_price, products_number, '
+                    "SELECT selling_price, products_number, "
                     + ON_SALE_SQL
                     + ' AS on_sale FROM store_product WHERE "UPC" = %s FOR UPDATE',
                     [product["UPC"]],
@@ -749,11 +788,13 @@ def check_list_create(request):
                     else list_price
                 )
                 subtotal += qty * real_price
-                processed_products.append({
-                    "UPC": product["UPC"],
-                    "product_number": qty,
-                    "selling_price": real_price,
-                })
+                processed_products.append(
+                    {
+                        "UPC": product["UPC"],
+                        "product_number": qty,
+                        "selling_price": real_price,
+                    }
+                )
 
             discount_amount = round(subtotal * card_percent / 100.0, 2)
             sum_total = subtotal - discount_amount
@@ -769,7 +810,12 @@ def check_list_create(request):
                 queries.execute(
                     """INSERT INTO sale ("UPC", check_number, product_number, selling_price)
                        VALUES (%s, %s, %s, %s)""",
-                    [pp["UPC"], check_number, pp["product_number"], pp["selling_price"]],
+                    [
+                        pp["UPC"],
+                        check_number,
+                        pp["product_number"],
+                        pp["selling_price"],
+                    ],
                 )
                 queries.execute(
                     'UPDATE store_product SET products_number = products_number - %s WHERE "UPC" = %s',
@@ -812,10 +858,9 @@ def check_detail(request, check_number):
         if not check:
             return JsonResponse({"error": "Чек не знайдено"}, status=404)
 
-        if (
-            request.session.get("role") == "Cashier"
-            and check["id_employee"] != request.session.get("employee_id")
-        ):
+        if request.session.get("role") == "Cashier" and check[
+            "id_employee"
+        ] != request.session.get("employee_id"):
             return JsonResponse({"error": "Доступ заборонено"}, status=403)
 
         items = queries.fetch_all(
@@ -866,9 +911,13 @@ def report_sales_revenue(request):
         params.append(end)
 
     result = queries.fetch_one(query, params)
-    return JsonResponse({
-        "total_revenue": result["total_revenue"] if result and result["total_revenue"] else 0
-    })
+    return JsonResponse(
+        {
+            "total_revenue": (
+                result["total_revenue"] if result and result["total_revenue"] else 0
+            )
+        }
+    )
 
 
 @require_http_methods(["GET"])
@@ -895,9 +944,13 @@ def report_product_volume(request):
         params.append(end)
 
     result = queries.fetch_one(query, params)
-    return JsonResponse({
-        "total_volume": result["total_volume"] if result and result["total_volume"] else 0
-    })
+    return JsonResponse(
+        {
+            "total_volume": (
+                result["total_volume"] if result and result["total_volume"] else 0
+            )
+        }
+    )
 
 
 @require_http_methods(["GET"])
@@ -975,9 +1028,7 @@ def report_total_sold_per_product(request):
 @require_http_methods(["GET"])
 @manager_required
 def report_customers_served_by_all_cashiers(request):
-    return JsonResponse(
-        {"results": queries.get_customers_served_by_all_cashiers()}
-    )
+    return JsonResponse({"results": queries.get_customers_served_by_all_cashiers()})
 
 
 @require_http_methods(["GET"])
@@ -985,17 +1036,13 @@ def report_customers_served_by_all_cashiers(request):
 def report_top_cashiers(request):
     start = request.GET.get("start", "1970-01-01")
     end = request.GET.get("end", "2100-01-01")
-    return JsonResponse(
-        {"results": queries.get_top_cashiers_for_period(start, end)}
-    )
+    return JsonResponse({"results": queries.get_top_cashiers_for_period(start, end)})
 
 
 @require_http_methods(["GET"])
 @manager_required
 def report_categories_all_products_sold(request):
-    return JsonResponse(
-        {"results": queries.get_categories_with_all_products_sold()}
-    )
+    return JsonResponse({"results": queries.get_categories_with_all_products_sold()})
 
 
 @require_http_methods(["GET"])
@@ -1003,9 +1050,7 @@ def report_categories_all_products_sold(request):
 def report_total_sold_per_category(request):
     start = request.GET.get("start", "1970-01-01")
     end = request.GET.get("end", "2100-01-01")
-    return JsonResponse(
-        {"results": queries.get_total_sold_per_category(start, end)}
-    )
+    return JsonResponse({"results": queries.get_total_sold_per_category(start, end)})
 
 
 @require_http_methods(["GET"])
@@ -1069,3 +1114,22 @@ def ui_dropdowns(request, entity):
 
     results = queries.fetch_all(query)
     return JsonResponse({"results": results}, safe=False)
+
+
+def validate_employee_dates(dob_str, dos_str):
+    """Перевіряє, чи виповнилося працівнику 18 років на момент прийому на роботу."""
+    if not dob_str or not dos_str:
+        return None
+    try:
+        # Відрізаємо можливі години/хвилини, залишаємо YYYY-MM-DD
+        dob = datetime.strptime(dob_str[:10], "%Y-%m-%d").date()
+        dos = datetime.strptime(dos_str[:10], "%Y-%m-%d").date()
+        age = dos.year - dob.year - ((dos.month, dos.day) < (dob.month, dob.day))
+
+        if age < 18:
+            return "Працівнику має бути не менше 18 років на дату прийняття на роботу."
+        if dos < dob:
+            return "Дата прийняття не може бути ранішою за дату народження."
+    except ValueError:
+        return "Неправильний формат дати."
+    return None

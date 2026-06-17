@@ -100,6 +100,8 @@ SQL_CONSTRAINTS = [
     """,
     """ALTER TABLE store_product DROP CONSTRAINT IF EXISTS chk_sp_loop;""",
     """ALTER TABLE store_product ADD CONSTRAINT chk_sp_loop CHECK ("UPC" != "UPC_prom");""",
+    """ALTER TABLE employee DROP CONSTRAINT IF EXISTS chk_emp_age;""",
+    """ALTER TABLE employee ADD CONSTRAINT chk_emp_age CHECK (date_of_birth <= date_of_start - INTERVAL '18 years');""",
 ]
 
 
