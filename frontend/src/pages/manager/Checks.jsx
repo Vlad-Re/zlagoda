@@ -3,8 +3,10 @@ import { getChecks, getCheck, deleteCheck } from '../../api/checks';
 import { getDropdown } from '../../api/dropdowns';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 export default function Checks() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [cashiers, setCashiers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,11 +85,18 @@ export default function Checks() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>№ чека</th><th>Дата</th><th>Касир</th><th>Сума</th><th>ПДВ</th><th></th></tr>
+              <tr>
+                <SortTh sort={sort} field="check_number">№ чека</SortTh>
+                <SortTh sort={sort} field="print_date">Дата</SortTh>
+                <SortTh sort={sort} field="empl_surname">Касир</SortTh>
+                <SortTh sort={sort} field="sum_total">Сума</SortTh>
+                <SortTh sort={sort} field="vat">ПДВ</SortTh>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={6}><div className="empty-state"><p>Немає чеків</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.check_number}>
                   <td><span className="text-muted">{row.check_number}</span></td>
                   <td className="nowrap">{new Date(row.print_date).toLocaleString('uk-UA')}</td>

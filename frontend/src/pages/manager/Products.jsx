@@ -3,10 +3,12 @@ import { getProducts, createProduct, updateProduct, deleteProduct } from '../../
 import { getDropdown } from '../../api/dropdowns';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 const EMPTY = { id_product: '', category_number: '', product_name: '', characteristics: '' };
 
 export default function Products() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,11 +88,17 @@ export default function Products() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>ID</th><th>Назва</th><th>Категорія</th><th>Характеристики</th><th></th></tr>
+              <tr>
+                <SortTh sort={sort} field="id_product">ID</SortTh>
+                <SortTh sort={sort} field="product_name">Назва</SortTh>
+                <SortTh sort={sort} field="category_name">Категорія</SortTh>
+                <SortTh sort={sort} field="characteristics">Характеристики</SortTh>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={5}><div className="empty-state"><p>Немає товарів</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.id_product}>
                   <td><span className="text-muted">{row.id_product}</span></td>
                   <td>{row.product_name}</td>

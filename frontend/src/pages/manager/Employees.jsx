@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee, searchEmployees } from '../../api/employees';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 const EMPTY = {
   id_employee: '', empl_surname: '', empl_name: '', empl_patronymic: '',
@@ -10,10 +11,11 @@ const EMPTY = {
 };
 
 export default function Employees() {
+  const sort = useSort();
+  const searchSort = useSort();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sort, setSort] = useState('empl_surname');
   const [roleFilter, setRoleFilter] = useState('');
   const [modal, setModal] = useState(null);
   const [delTarget, setDelTarget] = useState(null);
@@ -25,7 +27,7 @@ export default function Employees() {
 
   const load = () => {
     setLoading(true);
-    const params = { sort };
+    const params = {};
     if (roleFilter) params.role = roleFilter;
     getEmployees(params)
       .then((r) => setRows(r.results))
@@ -33,7 +35,7 @@ export default function Employees() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [sort, roleFilter]);
+  useEffect(load, [roleFilter]);
 
   const openCreate = () => { setForm(EMPTY); setFormError(''); setModal({ mode: 'create' }); };
   const openEdit = (row) => { setForm({ ...row, password: '' }); setFormError(''); setModal({ mode: 'edit', id: row.id_employee }); };
@@ -116,15 +118,6 @@ export default function Employees() {
           </select>
         </div>
         <div className="filter-group">
-          <label>Сортування</label>
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="empl_surname">Прізвище</option>
-            <option value="empl_role">Роль</option>
-            <option value="salary">Зарплата</option>
-            <option value="date_of_start">Дата прийому</option>
-          </select>
-        </div>
-        <div className="filter-group">
           <label>Пошук за прізвищем (телефон+адреса)</label>
           <div className="flex gap-sm">
             <input type="text" value={searchSurname} onChange={(e) => setSearchSurname(e.target.value)}
@@ -140,11 +133,18 @@ export default function Employees() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>Прізвище</th><th>Ім'я</th><th>Телефон</th><th>Місто</th><th>Вулиця</th><th>Індекс</th></tr>
+                <tr>
+                  <SortTh sort={searchSort} field="empl_surname">Прізвище</SortTh>
+                  <SortTh sort={searchSort} field="empl_name">Ім'я</SortTh>
+                  <SortTh sort={searchSort} field="phone_number">Телефон</SortTh>
+                  <SortTh sort={searchSort} field="city">Місто</SortTh>
+                  <SortTh sort={searchSort} field="street">Вулиця</SortTh>
+                  <SortTh sort={searchSort} field="zip_code">Індекс</SortTh>
+                </tr>
               </thead>
               <tbody>
                 {searchResults.length === 0 && <tr><td colSpan={6} className="text-center">Нічого не знайдено</td></tr>}
-                {searchResults.map((r, i) => (
+                {searchSort.apply(searchResults).map((r, i) => (
                   <tr key={i}>
                     <td>{r.empl_surname}</td><td>{r.empl_name}</td>
                     <td>{r.phone_number}</td><td>{r.city}</td>
@@ -162,13 +162,19 @@ export default function Employees() {
           <table>
             <thead>
               <tr>
-                <th>ID</th><th>Прізвище</th><th>Ім'я</th><th>Роль</th>
-                <th>Зарплата</th><th>Телефон</th><th>Дата прийому</th><th></th>
+                <SortTh sort={sort} field="id_employee">ID</SortTh>
+                <SortTh sort={sort} field="empl_surname">Прізвище</SortTh>
+                <SortTh sort={sort} field="empl_name">Ім'я</SortTh>
+                <SortTh sort={sort} field="empl_role">Роль</SortTh>
+                <SortTh sort={sort} field="salary">Зарплата</SortTh>
+                <SortTh sort={sort} field="phone_number">Телефон</SortTh>
+                <SortTh sort={sort} field="date_of_start">Дата прийому</SortTh>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={8}><div className="empty-state"><p>Немає працівників</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.id_employee}>
                   <td><span className="text-muted">{row.id_employee}</span></td>
                   <td>{row.empl_surname}</td>

@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { getCustomerCards, createCustomerCard, updateCustomerCard, deleteCustomerCard } from '../../api/customerCards';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 const EMPTY = { card_number: '', cust_surname: '', cust_name: '', cust_patronymic: '', phone_number: '', city: '', street: '', zip_code: '', percent: 0 };
 
 export default function CustomerCards() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [sort, setSort] = useState('cust_surname');
   const [surnameFilter, setSurnameFilter] = useState('');
   const [modal, setModal] = useState(null);
   const [delTarget, setDelTarget] = useState(null);
@@ -19,7 +20,7 @@ export default function CustomerCards() {
 
   const load = () => {
     setLoading(true);
-    const params = { sort };
+    const params = {};
     if (surnameFilter) params.surname = surnameFilter;
     getCustomerCards(params)
       .then((r) => setRows(r.results))
@@ -27,7 +28,7 @@ export default function CustomerCards() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [sort, surnameFilter]);
+  useEffect(load, [surnameFilter]);
 
   const openCreate = () => { setForm(EMPTY); setFormError(''); setModal({ mode: 'create' }); };
   const openEdit = (row) => { setForm({ ...row }); setFormError(''); setModal({ mode: 'edit', id: row.card_number }); };
@@ -68,14 +69,6 @@ export default function CustomerCards() {
 
       <div className="filters">
         <div className="filter-group">
-          <label>Сортування</label>
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="cust_surname">Прізвище</option>
-            <option value="percent">Знижка</option>
-            <option value="city">Місто</option>
-          </select>
-        </div>
-        <div className="filter-group">
           <label>Пошук за прізвищем</label>
           <input type="text" value={surnameFilter} onChange={(e) => setSurnameFilter(e.target.value)} placeholder="Прізвище клієнта..." />
         </div>
@@ -85,11 +78,19 @@ export default function CustomerCards() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>№ картки</th><th>Прізвище</th><th>Ім'я</th><th>Телефон</th><th>Знижка</th><th>Місто</th><th></th></tr>
+              <tr>
+                <SortTh sort={sort} field="card_number">№ картки</SortTh>
+                <SortTh sort={sort} field="cust_surname">Прізвище</SortTh>
+                <SortTh sort={sort} field="cust_name">Ім'я</SortTh>
+                <SortTh sort={sort} field="phone_number">Телефон</SortTh>
+                <SortTh sort={sort} field="percent">Знижка</SortTh>
+                <SortTh sort={sort} field="city">Місто</SortTh>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={7}><div className="empty-state"><p>Немає карток</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.card_number}>
                   <td><span className="text-muted">{row.card_number}</span></td>
                   <td>{row.cust_surname}</td>

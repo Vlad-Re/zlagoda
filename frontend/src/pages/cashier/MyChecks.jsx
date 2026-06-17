@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { getChecks, getCheck } from '../../api/checks';
 import Modal from '../../components/Modal';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 export default function MyChecks() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,10 +59,16 @@ export default function MyChecks() {
       {loading ? <div className="loading">Завантаження...</div> : (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>№ чека</th><th>Дата і час</th><th>Сума</th><th>ПДВ</th><th></th></tr></thead>
+            <thead><tr>
+              <SortTh sort={sort} field="check_number">№ чека</SortTh>
+              <SortTh sort={sort} field="print_date">Дата і час</SortTh>
+              <SortTh sort={sort} field="sum_total">Сума</SortTh>
+              <SortTh sort={sort} field="vat">ПДВ</SortTh>
+              <th></th>
+            </tr></thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={5}><div className="empty-state"><p>Немає чеків</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.check_number}>
                   <td><span className="text-muted">{row.check_number}</span></td>
                   <td className="nowrap">{new Date(row.print_date).toLocaleString('uk-UA')}</td>

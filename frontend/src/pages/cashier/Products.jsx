@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { getStoreProducts } from '../../api/storeProducts';
 import { getDropdown } from '../../api/dropdowns';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 export default function CashierProducts() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +53,18 @@ export default function CashierProducts() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Назва</th><th>Категорія</th><th>UPC</th><th>Ціна</th><th>На складі</th><th>Акція</th></tr>
+              <tr>
+                <SortTh sort={sort} field="product_name">Назва</SortTh>
+                <SortTh sort={sort} field="category_name">Категорія</SortTh>
+                <SortTh sort={sort} field="UPC">UPC</SortTh>
+                <SortTh sort={sort} field="selling_price">Ціна</SortTh>
+                <SortTh sort={sort} field="products_number">На складі</SortTh>
+                <SortTh sort={sort} field="promotional_product">Акція</SortTh>
+              </tr>
             </thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={6}><div className="empty-state"><p>Немає товарів</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.UPC}>
                   <td>{row.product_name}</td>
                   <td>{row.category_name}</td>

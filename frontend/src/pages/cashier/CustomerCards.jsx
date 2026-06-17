@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { getCustomerCards, createCustomerCard, updateCustomerCard } from '../../api/customerCards';
 import Modal from '../../components/Modal';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 const EMPTY = { card_number: '', cust_surname: '', cust_name: '', cust_patronymic: '', phone_number: '', city: '', street: '', zip_code: '', percent: 0 };
 
 export default function CashierCustomerCards() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -65,10 +67,17 @@ export default function CashierCustomerCards() {
       {loading ? <div className="loading">Завантаження...</div> : (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>№ картки</th><th>Прізвище</th><th>Ім'я</th><th>Телефон</th><th>Знижка</th><th></th></tr></thead>
+            <thead><tr>
+              <SortTh sort={sort} field="card_number">№ картки</SortTh>
+              <SortTh sort={sort} field="cust_surname">Прізвище</SortTh>
+              <SortTh sort={sort} field="cust_name">Ім'я</SortTh>
+              <SortTh sort={sort} field="phone_number">Телефон</SortTh>
+              <SortTh sort={sort} field="percent">Знижка</SortTh>
+              <th></th>
+            </tr></thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={6}><div className="empty-state"><p>Немає карток</p></div></td></tr>}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.card_number}>
                   <td><span className="text-muted">{row.card_number}</span></td>
                   <td>{row.cust_surname}</td>

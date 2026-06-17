@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../../api/categories';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useSort, SortTh } from '../../hooks/useSort.jsx';
 
 const EMPTY = { category_number: '', category_name: '' };
 
 export default function Categories() {
+  const sort = useSort();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -80,8 +82,8 @@ export default function Categories() {
           <table>
             <thead>
               <tr>
-                <th>№</th>
-                <th>Назва</th>
+                <SortTh sort={sort} field="category_number">№</SortTh>
+                <SortTh sort={sort} field="category_name">Назва</SortTh>
                 <th></th>
               </tr>
             </thead>
@@ -89,7 +91,7 @@ export default function Categories() {
               {rows.length === 0 && (
                 <tr><td colSpan={3}><div className="empty-state"><p>Немає категорій</p></div></td></tr>
               )}
-              {rows.map((row) => (
+              {sort.apply(rows).map((row) => (
                 <tr key={row.category_number}>
                   <td>{row.category_number}</td>
                   <td>{row.category_name}</td>
