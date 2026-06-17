@@ -81,10 +81,10 @@ export default function Reports() {
         const r = await getTopCashiers(p);
         setData(r.results);
       } else if (tab === 'advanced') {
-        const [cats, cust, emp] = await Promise.all([
-          getCategoriesAllProductsSold(), getCustomersServedByAll(), getEmployeesServedAll(),
+        const [cats, cust, emp, topc] = await Promise.all([
+          getCategoriesAllProductsSold(), getCustomersServedByAll(), getEmployeesServedAll(), getTopCashiers(p),
         ]);
-        setData({ cats: cats.results, cust: cust.results, emp: emp.results });
+        setData({ cats: cats.results, cust: cust.results, emp: emp.results, topCashiers: topc.results });
       }
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -207,7 +207,20 @@ export default function Reports() {
     if (tab === 'advanced') {
       return (
         <div>
-          <h3>Категорії, де продано кожен товар</h3>
+          <h3>Найприбутковіші касири за період (понад 5 чеків)</h3>
+          <table><thead><tr><th>Касир</th><th>Чеків</th><th>Виручка</th><th>Середній чек</th></tr></thead>
+            <tbody>{data.topCashiers.map((r) => (
+              <tr key={r.id_employee}>
+                <td>{r.empl_surname} {r.empl_name}</td>
+                <td>{r.checks_count}</td>
+                <td>{Number(r.revenue).toFixed(2)} грн</td>
+                <td>{Number(r.avg_check).toFixed(2)} грн</td>
+              </tr>
+            ))}
+              {data.topCashiers.length === 0 && <tr><td colSpan={4} className="text-center">Немає даних</td></tr>}
+            </tbody>
+          </table>
+          <h3 style={{ marginTop: '1.5rem' }}>Категорії, де продано кожен товар</h3>
           <table><thead><tr><th>№</th><th>Назва категорії</th></tr></thead>
             <tbody>{data.cats.map((r) => <tr key={r.category_number}><td>{r.category_number}</td><td>{r.category_name}</td></tr>)}
               {data.cats.length === 0 && <tr><td colSpan={2} className="text-center">Немає даних</td></tr>}
@@ -245,7 +258,7 @@ export default function Reports() {
         ))}
       </div>
 
-      {tab !== 'promo' && tab !== 'advanced' && (
+      {tab !== 'promo' && (
         <DateRange value={filters} onChange={setFilters} showEmployee={['checks','revenue'].includes(tab)} cashiers={cashiers} />
       )}
 
