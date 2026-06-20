@@ -98,20 +98,34 @@ class Command(BaseCommand):
                 products,
             )
 
+            # Realistic selling price (грн) per product id — keeps the shop credible.
+            product_prices = {
+                1: 42.50, 2: 38.90, 3: 55.00, 4: 78.00, 5: 95.50, 6: 29.90, 7: 165.00,
+                8: 28.00, 9: 24.50, 10: 32.00, 11: 18.00, 12: 22.00,
+                13: 189.00, 14: 245.00, 15: 380.00, 16: 135.00, 17: 142.00, 18: 98.00,
+                19: 49.90, 20: 21.00, 21: 87.00, 22: 215.00, 23: 27.50, 24: 18.50,
+                25: 54.90, 26: 23.00, 27: 119.00, 28: 46.00, 29: 38.00, 30: 62.00,
+                31: 45.00, 32: 39.90, 33: 58.00, 34: 89.00, 35: 52.00,
+                36: 19.90, 37: 17.50, 38: 16.00, 39: 72.00, 40: 65.00,
+                41: 89.00, 42: 320.00, 43: 215.00, 44: 175.00, 45: 132.00,
+                46: 42.00, 47: 34.00, 48: 36.00, 49: 165.00, 50: 28.00,
+            }
+
             # 3. Store Products (80)
             store_products = []
             upc_list = []
             for i in range(1, 61):
                 upc = f"{i:012d}"
                 upc_list.append(upc)
-                price = round(random.uniform(15.0, 500.0), 2)
+                pid = i if i <= 50 else random.randint(1, 49)
+                price = product_prices[pid]
                 # 20% chance of 0 stock for Out-Of-Stock testing
                 qty = random.choice([0, 0, 10, 50, 100, 200])
                 store_products.append(
                     (
                         upc,
                         None,
-                        i if i <= 50 else random.randint(1, 49),
+                        pid,
                         price,
                         qty,
                         False,
